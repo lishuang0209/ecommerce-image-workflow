@@ -1,0 +1,85 @@
+---
+name: beatdesign-workspace
+description: Operate a local BeatDesign project through MCP when the user asks to create, organize, generate, inspect, or edit media in BeatDesign, including opening the exact Canvas or Editor in Codex for visible review.
+---
+
+# BeatDesign workspace
+
+Use BeatDesign MCP as the semantic control plane and the BeatDesign browser workspace as the review surface. Both operate the same local Project, Assets, Canvas, Timeline, and command history.
+
+## Start with a visible project
+
+1. Call `bdesign_project_list` when the project is not already unambiguous.
+2. Call `bdesign_project_target` once. Later project-scoped tools may omit `projectId` in this MCP session.
+3. Call `bdesign_project_open` near the start of the task with the view that best matches the work.
+4. When `browserHandoff` is returned and the Browser skill is available, open `browserHandoff.url` exactly. Reuse an existing tab for the same project, make it visible, and keep it open as a deliverable. Use `workspaceUrl` for direct links shown to the user.
+
+For Canvas-specific review, call `bdesign_canvas_view` with `cardId` so the workspace selects and focuses the changed card. For timeline review, call `bdesign_editor_view` with the relevant time.
+
+## Change the shared project safely
+
+- Read the current Canvas or Editor state before editing.
+- Use incremental Canvas and Editor operations with stable IDs and a stable idempotency key. Never replace a complete Canvas or Timeline document.
+- Legacy incremental commands may retry a short revision race against the newest authoritative document; organization and template commands require explicit conflict review. If a result still includes `retry`, follow its instruction once after reading the latest state; do not busy-loop.
+- Import local media through `bdesign_asset_import` before referencing it from Canvas or Editor.
+- Treat generation as asset-first: generated output becomes a Project Asset before placement.
+
+## Update project settings
+
+- Call `bdesign_project_get` and use `settings.settingsRevision` as the expected
+  revision for `bdesign_project_update`. Settings revisions are separate from
+  Canvas and Editor revisions.
+- Update only the requested name, description or cover. A manual cover must be
+  an image Asset in this Project; import a local image first when needed. Use
+  `cover: { "mode": "auto" }` to restore automatic cover selection.
+- Reuse the command ID and idempotency key when delivery is uncertain. On a
+  revision conflict, read the latest settings and resolve the conflicting edit
+  before submitting again; do not overwrite another change blindly.
+- Read the saved settings back and inspect the project card or workspace header.
+  Project settings refresh while visible within about five seconds.
+
+## Organize assets and reuse workflows
+
+- Discover the installed tool catalog first; organization tools are available in
+  current source and are not included in the published v0.2.5 runtime.
+- Use `bdesign_organization_get` / `bdesign_asset_query` for folders and versioned
+  Elements. Folder changes are logical; they do not move media files.
+- Apply semantic operations with explicit command ID, idempotency key and the
+  correct expected revision. Organization, Canvas and template revisions are
+  separate. On a semantic conflict, read and review again; do not adopt a newer
+  revision automatically. Reuse the original envelope if delivery is uncertain.
+- Element references pin exact Asset/version IDs. Changing the current version
+  does not silently replace existing references or Timeline clips.
+- Use `bdesign_workflow_template_preview` before capture/instantiation, then
+  `bdesign_workflow_template_apply`. Keep the reviewed digest and source revision.
+  Insertions create editable drafts only; missing required slots block generation.
+- Inspect the result in Canvas/Assets. Use `bdesign_timeline_usage` to check actual
+  pinned Timeline usage. Organizing, previewing or loading a template must never
+  trigger generation or upload.
+
+## Import captions
+
+- Prefer `bdesign_editor_import_srt` for an SRT file or complete SRT text. Use `bdesign_editor_edit` with `upsert_caption` only for targeted cue changes; do not represent captions as generic media clips.
+- A rejected or malformed SRT import leaves existing captions unchanged. Report the parse error instead of retrying with `replace=true` or clearing the track.
+- After import, call `bdesign_editor_view` at the first relevant cue time and confirm the caption text, timing, and line breaks in the visible Editor.
+
+## Continue a video from its tail frame
+
+- Call `bdesign_canvas_continue_from_tail` with one stable command ID. Reuse that ID if delivery is uncertain; do not create a new retry ID, because the operation deliberately reuses one derived frame Asset and one continuation node.
+- Call the returned `review.tool` before generation so the user can inspect the extracted frame and continuation node.
+- If frame extraction reports that `ffmpeg` is unavailable, stop and explain that the MCP host needs `ffmpeg` on `PATH` or an absolute `BEATDESIGN_FFMPEG`; do not retry the same command until that setup changes.
+- Tail-frame extraction and Canvas placement are local deterministic work. The returned `next` generation request is a separate remote action: submit it only when the user has authorized that generation and its provider cost.
+- After submission, follow generation status until it succeeds, fails, or needs user action. A successful generation creates an Asset but does not place itself. Read the current continuation card, preserve its generation settings, update the returned `generationCardId` with that output through `bdesign_canvas_apply`, then call `bdesign_canvas_view` with the same card ID.
+- If continuation returns `ok=false`, preserve its structured conflict or rollback result. Follow a returned retry instruction at most once after reading current state; do not blindly re-extract frames.
+
+## Export the authoritative timeline
+
+- When the user authorizes an export, call `bdesign_editor_get`, then call `bdesign_editor_render` with the returned revision. The result is a project-owned MP4 Asset that includes visible clips, image overlays, caption burn-in, and mixed audio.
+- If rendering reports that `ffmpeg` or `ffprobe` is unavailable, stop and explain that the MCP host needs those binaries on `PATH`, or absolute `BEATDESIGN_FFMPEG` and `BEATDESIGN_FFPROBE` paths.
+- A render-affecting edit invalidates the previous current render without deleting its historical Asset. If the timeline changes during rendering, read the latest revision and ask before starting another potentially expensive render.
+
+## Verify what the user can see
+
+After a write, read the returned revision and changed IDs, then inspect the already-open Canvas or Editor. Canvas and Editor currently refresh external revisions within about two seconds and on focus. Confirm the intended card, clip, caption, duration, or media is visible; a successful database revision alone is not completion.
+
+Leave the relevant project tab open at the review point. Do not export, submit a paid generation, or create extra variants unless the user's request clearly authorizes that exact action.

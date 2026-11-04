@@ -1,0 +1,78 @@
+# dependencies
+/node_modules
+/.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+
+# tanstack start / vite / nitro
+/.output/
+/.nitro/
+/.tanstack/
+/dist/
+src/routeTree.gen.ts
+src/paraglide/
+
+# local agent state
+/.claude/
+/.agents/
+/.codex/
+/.cursor/
+/.zcode/
+
+# production
+/build
+
+# editors
+.idea
+.vscode
+.playwright-mcp/
+/test-results/
+/playwright-report/
+
+# misc
+.DS_Store
+*.pem
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# local secret files
+.env
+.env.*
+
+# typescript
+*.tsbuildinfo
+
+# database
+/data/
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite-journal
+*.sqlite-shm
+*.sqlite-wal
+*.sqlite3
+src/config/db/schema.ts
+
+# npm (project uses pnpm)
+package-lock.json
+
+# Runtime uploads and local QA artifacts
+/public/uploads/
+/public/demo-assets/
+/promotion-kit/
+/*-before.png
+/design-qa-*.png
+/design-qa.md
+/canvas-rollback-empty.png
+/.gstack/
+.gstack/

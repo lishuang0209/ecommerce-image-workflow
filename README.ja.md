@@ -1,0 +1,163 @@
+<p align="center">
+  <img src="./docs/assets/beatdesign-readme-cover-v3.jpg" alt="BeatDesignの無限Canvasとローカル動画Editor" width="100%" />
+</p>
+
+<p align="center">
+    <a href="https://linux.do" alt="LINUX DO">
+        <img
+            src="https://img.shields.io/badge/LINUX-DO-FFB003.svg?logo=data:image/svg%2bxml;base64,DQo8c3ZnIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyIgd2lkdGg9IjEwMCIgaGVpZ2h0PSIxMDAiPjxwYXRoIGQ9Ik00Ni44Mi0uMDU1aDYuMjVxMjMuOTY5IDIuMDYyIDM4IDIxLjQyNmM1LjI1OCA3LjY3NiA4LjIxNSAxNi4xNTYgOC44NzUgMjUuNDV2Ni4yNXEtMi4wNjQgMjMuOTY4LTIxLjQzIDM4LTExLjUxMiA3Ljg4NS0yNS40NDUgOC44NzRoLTYuMjVxLTIzLjk3LTIuMDY0LTM4LjAwNC0yMS40M1EuOTcxIDY3LjA1Ni0uMDU0IDUzLjE4di02LjQ3M0MxLjM2MiAzMC43ODEgOC41MDMgMTguMTQ4IDIxLjM3IDguODE3IDI5LjA0NyAzLjU2MiAzNy41MjcuNjA0IDQ2LjgyMS0uMDU2IiBzdHlsZT0ic3Ryb2tlOm5vbmU7ZmlsbC1ydWxlOmV2ZW5vZGQ7ZmlsbDojZWNlY2VjO2ZpbGwtb3BhY2l0eToxIi8+PHBhdGggZD0iTTQ3LjI2NiAyLjk1N3EyMi41My0uNjUgMzcuNzc3IDE1LjczOGE0OS43IDQ5LjcgMCAwIDEgNi44NjcgMTAuMTU3cS00MS45NjQuMjIyLTgzLjkzIDAgOS43NS0xOC42MTYgMzAuMDI0LTI0LjM4N2E2MSA2MSAwIDAgMSA5LjI2Mi0xLjUwOCIgc3R5bGU9InN0cm9rZTpub25lO2ZpbGwtcnVsZTpldmVub2RkO2ZpbGw6IzE5MTkxOTtmaWxsLW9wYWNpdHk6MSIvPjxwYXRoIGQ9Ik03Ljk4IDcwLjkyNmMyNy45NzctLjAzNSA1NS45NTQgMCA4My45My4xMTNRODMuNDI2IDg3LjQ3MyA2Ni4xMyA5NC4wODZxLTE4LjgxIDYuNTQ0LTM2LjgzMi0xLjg5OC0xNC4yMDMtNy4wOS0yMS4zMTctMjEuMjYyIiBzdHlsZT0ic3Ryb2tlOm5vbmU7ZmlsbC1ydWxlOmV2ZW5vZGQ7ZmlsbDojZjlhZjAwO2ZpbGwtb3BhY2l0eToxIi8+PC9zdmc+" /></a>
+</p>
+
+<h1 align="center">BeatDesign</h1>
+
+<p align="center">
+  <strong>ローカルで動くHiggsfieldのオープンソース代替</strong><br />
+  無限Canvasで画像と動画のワークフローを組み立て、ブラウザーネイティブのEditorで仕上げ、MCP対応Agentから同じProjectを操作できます。
+</p>
+
+<p align="center">
+  <a href="https://beatapi.io/design">ウェブサイト</a> ·
+  <a href="#クイックスタート">クイックスタート</a> ·
+  <a href="#agentからbeatdesignを使う">MCP</a> ·
+  <a href="./docs/PRODUCT_PLAN_AND_STATUS.md">製品ステータス</a>
+</p>
+
+<p align="center">
+  <a href="./README.md">English</a> ·
+  <a href="./README.zh-CN.md">简体中文</a> ·
+  <strong>日本語</strong>
+</p>
+
+BeatDesignは、AI画像・動画制作のための独立したオープンソース、ローカルファーストのワークスペースです。Higgsfieldのような一貫した制作フローを、自分のマシンで実行、確認、拡張したい人に向けて作られています。
+
+## 最新リリース · v0.2.5 · 2026年10月
+
+以下の更新は[GitHub Release v0.2.5](https://github.com/BeatAPI/BeatDesign/releases/tag/v0.2.5)と`@beatapi/beatdesign-workbuddy@0.2.5`で公開済みです。WorkBuddyマーケットの審査・公開状況は別途確認してください。
+
+ソース版を更新する場合はBeatDesignを停止し、`git pull --ff-only`、`pnpm install --frozen-lockfile`、`pnpm db:push` の順に実行してから、`pnpm dev:agent`（または通常のUI/MCP起動コマンド）を再起動してください。ローカルデータを保持し、Projectを初期化しないでください。
+
+- **Project設定とカバー：** 名前と説明の編集、画像カバーのアップロード・選択、自動カバーへのリセットに対応。手動カバーは後の読み込みや生成で置き換わりません。Projectカードまたはワークスペース上部の設定アイコンから開きます。
+- **生成バージョンの一致：** CanvasのプレビューとTake選択が最新の成功結果を示します。手動選択とTimelineの固定Assetは保持されます。
+- **Projectへ直接移動：** CanvasまたはStudioを選ぶとProjectを作成して直接開きます。再試行と連打防止にも対応します。
+- **音量を保持した書き出し：** MCPのTimeline書き出しで順番に並ぶClipの音量を保持し、重なる音声にはピーク保護を適用します。
+- **30個のMCPツール：** AgentもUIと同じバージョン確認付きコマンドでProject設定を更新できます。空のCanvasへの取り消し・やり直しの保存、Windowsテスト互換性、狭い画面のレイアウトも改善しました。
+
+末尾フレームからの続き生成、CanvasからEditorへの移行、画像オーバーレイ、スタイル付きSRT字幕、ブラウザーとMCPによるMP4書き出しも利用できます。ブラウザーの書き出しにはシステムFFmpegは不要です。MCPのフレーム抽出には`ffmpeg`、Timeline書き出しにはさらに`ffprobe`が必要です。
+
+[変更履歴](./CHANGELOG.md) · [Project設定](./docs/PROJECT_SETTINGS.md) · [現状とロードマップ](./docs/PRODUCT_PLAN_AND_STATUS.md)
+
+現在のソース（未リリース）は永続 Canvas グループ、素材フォルダー、固定バージョンの Elements、ローカルワークフローテンプレートと 38 の MCP ツールを含みます。v0.2.5 npm パッケージは 30 ツールです。[詳細](./docs/PROJECT_ORGANIZATION.md)。
+
+## 2つの制作モード、1つのProject
+
+### 無限Canvas
+
+プロンプト、画像、動画、音声を配置できます。ノードを接続し、アイデアを分岐させ、生成結果を比較して再利用し、ビジュアルワークフロー全体を1つのProjectに保存します。
+
+### 動画Editor
+
+Canvasの結果をローカルTimelineへ送ります。トリミング、分割、移動、音声ミックス、画像オーバーレイの配置と調整、SRT字幕のスタイル設定、AIによる別Takeの作成、プレビュー、ブラウザーでのMP4書き出しに対応します。
+
+Studioは集中した生成画面を提供します。Assetsでは、読み込み済み・生成済みのファイルをCanvas、Editor、MCPから共通して利用できます。
+
+## BeatDesignを選ぶ理由
+
+- **デフォルトでローカル保存。** Project、メディア、Canvasの状態、Timeline、生成履歴はローカルワークスペースに保存されます。
+- **CanvasとEditorがつながる。** 生成結果は再利用可能なProject Assetとなり、1つのツール内に閉じ込められません。
+- **好きなAgentを使える。** Codex、Claude Code、CursorなどのMCP Hostが、ブラウザーに表示されている同じProjectを読み取り、更新できます。
+- **生成サービスは自分で設定。** BeatAPIが組み込みProviderです。ローカルでの読み込み、配置、編集、プレビュー、書き出しにAPI Keyは不要です。
+- **Forkしやすい設計。** Provider Adapter、Projectストレージ、Command Kernelには明確な拡張ポイントがあります。
+
+## アイデアから完成動画まで
+
+```text
+プロンプトまたはローカルメディア
+        ↓
+無限Canvas ───── 接続、生成、分岐、比較
+        ↓
+共有Assets ───── 画像、動画、音声、派生Clip
+        ↓
+動画Editor ───── トリミング、配置、プレビュー、MP4書き出し
+        ↑
+任意のMCP Agent ─ 同じローカルProjectを操作
+```
+
+## クイックスタート
+
+Node.js 22以上、`pnpm` 10以上、macOSまたはWindows上の最新Chromeが必要です。
+
+```bash
+pnpm install
+pnpm db:push
+pnpm dev
+```
+
+[http://127.0.0.1:3020](http://127.0.0.1:3020)を開きます。
+
+画像・動画の生成や分析、AI再生成を使う場合にのみ、自分の[BeatAPI API Key](https://beatapi.io/dashboard/apikeys)を追加します。ローカルファイルを選択しただけではProviderへアップロードされません。
+
+### 起動方法を選ぶ
+
+| コマンド | 起動するもの |
+| --- | --- |
+| `pnpm dev` | ビジュアルワークスペース |
+| `pnpm dev:agent` | ビジュアルワークスペースとローカルHTTP MCP Endpoint |
+| `pnpm mcp` | コーディングAgent向けstdio MCP Server |
+
+## AgentからBeatDesignを使う
+
+現在のソースはSkill、Project、Asset、Canvas、生成、Editor操作をカバーする38個のローカルMCPツールを提供し（v0.2.5の公開パッケージは30個）、、内蔵Skillの検出と正式なTimelineからのMP4書き出しにも対応します。Agentによる変更は同じProjectサービスを通り、ブラウザーのワークスペースに表示されます。
+
+MCP Hostへ接続した後は、次のように依頼できます。
+
+> 最新のBeatDesign Projectを開き、このClipをTimelineへ追加し、ブランド画像のオーバーレイと字幕を調整して、確認できるようにEditorを開いてください。
+
+## プラットフォーム互換性
+
+| コーディングAgent / プラットフォーム | ステータス | クイックセットアップ |
+| --- | --- | --- |
+| [Claude Code](./integrations/claude-code/beatdesign/README.md) | ✅ 対応 | [プラグインまたはMCP設定](./integrations/claude-code/) |
+| [Codex](./integrations/codex/beatdesign/README.md) | ✅ 対応 | [プラグイン設定](./integrations/codex/beatdesign/README.md) |
+| [ZCode](./integrations/zcode/config.example.json) | ✅ 対応 | [MCP設定](./integrations/zcode/config.example.json) |
+| [OpenCode](./integrations/opencode/) | ✅ 対応 | [MCP設定](./integrations/opencode/) |
+| [Cursor](./integrations/cursor/mcp.json.example) | ✅ 対応 | [MCP設定](./integrations/cursor/mcp.json.example) |
+| [Windsurf](./integrations/windsurf/mcp_config.json.example) | ✅ 対応 | [MCP設定](./integrations/windsurf/mcp_config.json.example) |
+| [VS Code + GitHub Copilot](./integrations/vscode/mcp.json.example) | ✅ 対応 | [MCP設定](./integrations/vscode/mcp.json.example) |
+| [Cline / Roo Code](./integrations/cline/mcp_settings.json.example) | ✅ 対応 | [MCP設定](./integrations/cline/mcp_settings.json.example) |
+| [Qwen Code](./integrations/qwen/settings.example.json) | ✅ 対応 | [MCP設定](./integrations/qwen/settings.example.json) |
+| [Gemini CLI](./integrations/gemini/settings.example.json) | ✅ 対応 | [MCP設定](./integrations/gemini/settings.example.json) |
+| [Hermes Agent](./integrations/hermes/config.yaml.snippet) | ✅ 対応 | [MCP設定](./integrations/hermes/config.yaml.snippet) |
+| [Kiro](./integrations/kiro/mcp.json.example) | ✅ 対応 | [MCP設定](./integrations/kiro/mcp.json.example) |
+| [Trae](./integrations/trae/mcp.json.example) | ✅ 対応 | [MCP設定](./integrations/trae/mcp.json.example) |
+| [WorkBuddy](./integrations/workbuddy/beatdesign/README.md) | ✅ 対応 | [Connector設定](./integrations/workbuddy/beatdesign/README.md) |
+| [QwenWork](./integrations/qwenwork/mcp.json.example) | ✅ 対応 | [HTTP Connector](./integrations/qwenwork/mcp.json.example) |
+| [Doubao Work](./integrations/doubao-work/mcp.json.example) | ✅ 対応 | [HTTP Connector](./integrations/doubao-work/mcp.json.example) |
+
+[Agent連携ガイドの詳細を見る →](./integrations/README.md)
+
+## 現在利用できる機能
+
+- 画像・動画生成とStandard、Deep動画分析。
+- Canvas上の画像、動画、音声、生成、Timeline、テキストノード。
+- Studio、Canvas、Editor、MCPで共有されるProject Assets。
+- 画像、動画、音声、移動可能な画像オーバーレイ、スタイル付きSRT字幕トラックに対応した非破壊Timeline編集。
+- WebCodecsとMediabunnyによるローカルプレビューとブラウザー上のH.264/AAC MP4書き出し。
+- 英語、中国語、日本語のインターフェース。
+- ローカルstdioとStreamable HTTP MCP Transport。
+
+BeatDesignの現行リリースは、ローカルでのショート動画制作に重点を置いています。ホスト型コラボレーション、複数の名前付きTimeline、高度なトランジション、速度変更、波形、デスクトップパッケージは今後の範囲です。
+
+[実装済み機能と計画の全体を見る →](./docs/PRODUCT_PLAN_AND_STATUS.md)
+
+## プロジェクトガイド
+
+- [製品ステータス](./docs/PRODUCT_PLAN_AND_STATUS.md)
+- [MCP設定](./docs/MCP.md)
+- [アーキテクチャ](./docs/ARCHITECTURE.md)
+- [Provider連携](./docs/PROVIDERS.md)
+- [コントリビューション](./.github/CONTRIBUTING.md)
+- [セキュリティ](./.github/SECURITY.md)
+
+## ライセンス
+
+BeatDesignは[Apache License 2.0](./LICENSE)で提供されます。BeatAPIおよびBeatDesignの商標、第三者モデルへのアクセス、同梱される第三者コンポーネントには、それぞれの条件が適用されます。[第三者に関する通知](./third_party/)と[商標ポリシー](./docs/TRADEMARKS.md)をご覧ください。

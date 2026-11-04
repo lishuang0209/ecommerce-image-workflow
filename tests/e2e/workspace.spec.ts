@@ -1,0 +1,227 @@
+import { test, expect, type APIRequestContext } from '@playwright/test';
+import { readFile, stat } from 'node:fs/promises';
+
+const headers = { 'x-beatapi-workspace-request': '1' };
+let rpcId = 0;
+async function mcp(request: APIRequestContext, name: string, args: Record<string, unknown>) {
+  const response = await request.post('http://127.0.0.1:3043/mcp', {
+    headers: { authorization: 'Bearer e2e-local-only', accept: 'application/json, text/event-stream' },
+    data: { jsonrpc: '2.0', id: ++rpcId, method: 'tools/call', params: { name, arguments: args } },
+  });
+  expect(response.ok()).toBeTruthy();
+  const text = await response.text();
+  const data = JSON.parse(text.startsWith('{') ? text : text.split('\n').find((line) => line.startsWith('data: '))!.slice(6));
+  expect(data.error).toBeUndefined();
+  expect(data.result?.isError).not.toBe(true);
+  return data.result;
+}
+
+async function project(request: APIRequestContext, name: string) {
+  const response = await request.post('/api/app/projects', { headers, data: { name } });
+  expect(response.ok()).toBeTruthy();
+  return (await response.json()).id as string;
+}
+
+for (const type of ['image', 'video'] as const) {
+  test(`Canvas ${type} defaults to latest take and persists manual history selection`, async ({ page, request }) => {
+    const projectId = await project(request, `Latest ${type} take QA`);
+    const fixture = await readFile(type === 'image' ? 'public/logo.png' : 'tests/fixtures/tiny-black.mp4');
+    const urls: string[] = [];
+    const assetIds: string[] = [];
+    for (const index of [1, 2]) {
+      const uploaded = await request.post(`/api/app/projects/${projectId}/assets`, {
+        headers,
+        multipart: { file: {
+          name: `take-${index}.${type === 'image' ? 'png' : 'mp4'}`,
+          mimeType: type === 'image' ? 'image/png' : 'video/mp4',
+          buffer: Buffer.concat([fixture, Buffer.from(`take-${index}`)]),
+        } },
+      });
+      expect(uploaded.ok()).toBeTruthy();
+      const { asset } = await uploaded.json();
+      urls.push(asset.publicUrl);
+      assetIds.push(asset.id);
+    }
+    const draft = {
+      id: 'qa-latest-draft', kind: 'generation', type, name: 'Latest take QA', url: null,
+      prompt: 'Local version selection test', referenceCardIds: [], workflowTemplateId: null,
+      status: 'idle', error: null, modelId: type === 'image' ? 'gpt-image-2.5-flare' : 'seedance-2.0',
+      aspectRatio: '16:9', outputQuality: '720p', duration: '8s', mode: 'quality',
+      variant: 'standard', quality: 'standard', sourceGenerationId: null,
+    };
+    const outputs = [0, 1, 2].map((index) => ({
+      ...draft, id: `qa-take-${index}`, kind: 'output',
+      assetId: assetIds[index] ?? null,
+      status: index === 2 ? 'processing' : 'succeeded', url: urls[index] ?? null,
+      sourceConfigCardId: draft.id, generationRunId: `qa-run-${index}`,
+      generationSnapshot: { ...draft, capturedAt: `2026-10-18T00:0${index}:00.000Z` },
+    }));
+    const applied = await mcp(request, 'bdesign_canvas_apply', { projectId, operations: [draft, ...outputs].map((card) => ({
+      type: 'upsert_card', card, frame: { x: 200, y: 160, w: 420, h: 236 },
+    })) });
+    expect(applied.structuredContent.result.ok, JSON.stringify(applied)).toBe(true);
+    const snapshot = await (await request.get(`/api/app/projects/${projectId}/snapshot`)).json();
+    expect(snapshot.document.cards).toHaveLength(4);
+    await page.goto(`/canvas/${projectId}`);
+    const node = page.locator(`[data-card-id="${draft.id}"]`);
+    await expect(node).toBeVisible();
+    await expect(node.getByRole('button', { name: 'Take 2', exact: true })).toHaveAttribute('aria-pressed', 'true');
+    await expect(node.getByRole('button', { name: 'Take 1', exact: true })).toHaveAttribute('aria-pressed', 'false');
+    if (type === 'image') {
+      await expect(node.locator('img').first()).toHaveAttribute('src', urls[1]);
+    } else {
+      await node.getByRole('button', { name: /^View result:/ }).click();
+      await expect(page.locator('video').first()).toHaveAttribute('src', urls[1]);
+      await page.getByRole('dialog').getByRole('button').click();
+    }
+    await node.getByRole('button', { name: 'Take 1', exact: true }).click();
+    await expect(node.getByRole('button', { name: 'Take 1', exact: true })).toHaveAttribute('aria-pressed', 'true');
+    await page.getByRole('dialog').getByRole('button').click();
+    await expect.poll(async () => {
+      const state = await (await request.get(`/api/app/projects/${projectId}/snapshot`)).json();
+      return state.document.cards.find((card: { id: string }) => card.id === draft.id)?.pinnedOutputId;
+    }).toBe(outputs[0].id);
+    await page.reload();
+    await expect(node.getByRole('button', { name: 'Take 1', exact: true })).toHaveAttribute('aria-pressed', 'true');
+    await page.screenshot({ path: `test-results/latest-${type}-take.png` });
+  });
+}
+
+test('Canvas UI commands and MCP edits share durable state; unchanged polling is lightweight', async ({ page, request }) => {
+  const id = await project(request, 'Canvas concurrency QA');
+  const initial = { id: 'qa-draft', kind: 'generation', type: 'image', name: 'QA draft', prompt: 'Original prompt', modelId: 'gpt-image-2.5-flare' };
+  await mcp(request, 'bdesign_canvas_apply', { projectId: id, operations: [{ type: 'upsert_card', card: initial, frame: { x: 200, y: 160, w: 360, h: 300 } }] });
+  const writes: string[] = [];
+  const reads: string[] = [];
+  page.on('request', (req) => {
+    if (req.method() === 'POST' && req.url().includes('/commands')) writes.push(req.postData() ?? '');
+    if (req.method() === 'GET') reads.push(req.url());
+    expect(req.method() === 'PUT' && req.url().includes('/snapshot')).toBe(false);
+  });
+  await page.goto(`/canvas/${id}`);
+  const node = page.locator('.react-flow__node').first();
+  await expect(node).toBeVisible();
+  // Let initial snapshot hydration and camera fit finish before pointer input.
+  await page.waitForTimeout(800);
+  const box = await node.boundingBox();
+  expect(box).not.toBeNull();
+  await page.mouse.move(box!.x + box!.width / 2, box!.y + box!.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(box!.x + box!.width / 2 + 120, box!.y + box!.height / 2 + 60, { steps: 8 });
+  await mcp(request, 'bdesign_canvas_apply', { projectId: id, operations: [{ type: 'upsert_card', card: { ...initial, prompt: 'Agent revised prompt' } }] });
+  await page.waitForTimeout(2500);
+  await page.mouse.up();
+  await expect.poll(() => writes.some((body) => JSON.parse(body).command.type === 'canvas.apply')).toBe(true);
+  await expect.poll(async () => (await (await request.get(`/api/app/projects/${id}/snapshot`)).json()).document.cards[0].prompt).toBe('Agent revised prompt');
+  await expect.poll(async () => (await (await request.get(`/api/app/projects/${id}/snapshot`)).json()).document.frames['qa-draft'].x).not.toBe(200);
+  // Dragging can leave the pointer inside the card without a fresh pointerenter.
+  // Re-enter it to exercise the actual hover composer interaction.
+  await page.mouse.move(10, 80);
+  await node.hover();
+  await expect(page.locator('textarea').first()).toHaveValue('Agent revised prompt');
+  reads.length = 0;
+  await page.waitForTimeout(4500);
+  expect(reads.some((url) => url.endsWith('/revision'))).toBe(true);
+  expect(reads.filter((url) => url.endsWith('/snapshot'))).toHaveLength(0);
+  await page.screenshot({ path: 'test-results/canvas-desktop.png' });
+  await page.reload();
+  await expect(node).toBeVisible();
+});
+
+test('Local image media renders and exports MP4 without a provider key', async ({ page, request }) => {
+  const id = await project(request, 'Local media QA');
+  const uploaded = await request.post(`/api/app/projects/${id}/assets`, {
+    headers,
+    multipart: { file: { name: 'demo-logo.png', mimeType: 'image/png', buffer: await readFile('public/logo.png') } },
+  });
+  expect(uploaded.ok()).toBe(true);
+  const { asset } = await uploaded.json();
+  await mcp(request, 'bdesign_editor_edit', { projectId: id, operations: [{
+    type: 'add_clip', clipId: 'local-image', assetId: asset.id, sourceUrl: asset.publicUrl,
+    name: 'Local demo', sourceType: 'image', sourceDuration: 2,
+  }] });
+  await page.goto(`/editor/${id}`);
+  await expect(page.getByText('Local demo', { exact: true }).first()).toBeVisible();
+  await expect.poll(() => page.locator('img').evaluateAll((images) => images.some((image) => image instanceof HTMLImageElement && image.src.includes('/assets/') && image.complete && image.naturalWidth > 0))).toBe(true);
+  await page.screenshot({ path: 'test-results/editor-media-desktop.png' });
+  const download = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Export MP4', exact: true }).click();
+  const result = await download;
+  expect(result.suggestedFilename()).toMatch(/\.mp4$/);
+  expect((await stat((await result.path())!)).size).toBeGreaterThan(1000);
+});
+
+test('MCP captions appear without reload and local caption edits persist through editor.apply', async ({ page, request }) => {
+  const id = await project(request, 'Editor visibility QA');
+  await mcp(request, 'bdesign_editor_edit', { projectId: id, operations: [{ type: 'upsert_caption', clipId: 'caption-1', text: 'Original caption', startTime: 0, duration: 4 }] });
+  await page.goto(`/editor/${id}`);
+  await expect(page.getByText('Original caption', { exact: true }).first()).toBeVisible();
+  await mcp(request, 'bdesign_editor_edit', { projectId: id, operations: [{ type: 'upsert_caption', clipId: 'caption-1', text: 'Agent caption', startTime: 0, duration: 3 }] });
+  await expect(page.getByText('Agent caption', { exact: true }).first()).toBeVisible();
+  await page.getByRole('button', { name: 'Agent caption 3.00s', exact: true }).click();
+  const save = page.waitForResponse((response) => response.request().method() === 'POST' && response.url().endsWith('/commands'));
+  await page.locator('textarea').first().fill('Locally edited caption');
+  const saved = await save;
+  expect(saved.request().postDataJSON().command.type).toBe('editor.apply');
+  expect((await saved.json()).ok).toBe(true);
+  await expect.poll(async () => {
+    const state = await (await request.get(`/api/app/projects/${id}/timeline`)).json();
+    return state.timeline.document.tracks.flatMap((track: { clips: { text?: string }[] }) => track.clips).find((clip: { text?: string }) => clip.text === 'Locally edited caption')?.text;
+  }).toBe('Locally edited caption');
+  await page.screenshot({ path: 'test-results/editor-desktop.png' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({ path: 'test-results/editor-mobile.png' });
+  await expect(page.getByText('Locally edited caption', { exact: true }).first()).toBeVisible();
+});
+
+test('Studio sends asset-first validation and does not submit when provider setup is missing', async ({ page, request }) => {
+  const id = await project(request, 'Studio validation QA');
+  const submissions: string[] = [];
+  page.on('request', (req) => { if (req.url().endsWith('/api/effects/generate')) submissions.push(req.url()); });
+  await page.goto(`/studio/${id}`);
+  const prompt = page.locator('textarea').first();
+  await prompt.fill('A bright green geometric sculpture');
+  const validation = page.waitForRequest((req) => req.url().endsWith('/api/effects/precheck'));
+  await page.getByRole('button', { name: /generate/i }).last().click();
+  const payload = (await validation).postDataJSON();
+  expect(payload.generation.projectId).toBe(id);
+  expect(payload.generation.modelId).toBeTruthy();
+  expect(payload.effectId).toBeUndefined();
+  await expect(page.getByText(/key|configured|connect/i).last()).toBeVisible();
+  expect(submissions).toHaveLength(0);
+});
+
+test('Studio model picker and MCP discovery expose the updated catalog', async ({ page, request }) => {
+  const id = await project(request, 'Model catalog QA');
+  await page.goto(`/studio/${id}`);
+  await page.getByRole('button', { name: 'Model', exact: true }).click();
+  for (const name of ['Nano Banana 2.1', 'Seedream 5 Lite', 'Qwen Image 2.1']) {
+    await expect(page.getByText(name, { exact: true })).toBeVisible();
+  }
+  await page.getByText('Qwen Image 2.1', { exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Model', exact: true })).toContainText('Qwen Image 2.1');
+  await page.getByRole('button', { name: 'Media type' }).click();
+  await page.getByRole('option', { name: 'Video', exact: true }).click();
+  await page.getByRole('button', { name: 'Model', exact: true }).click();
+  for (const name of ['MiniMax H3 Fast', 'MiniMax H3 Normal', 'Kling 4']) {
+    await expect(page.getByRole('option', { name, exact: true })).toBeVisible();
+  }
+  await expect(page.getByRole('option', { name: /HappyHorse|Motion Control/i })).toHaveCount(0);
+  const discovery = JSON.stringify(await mcp(request, 'bdesign_generation_models', { kind: 'video' }));
+  expect(discovery).toContain('kling-v4');
+  expect(discovery).toContain('minimax-h3-normal');
+  expect(discovery).not.toContain('happyhorse');
+  expect(discovery).not.toContain('motion-control');
+});
+
+for (const locale of ['en', 'zh', 'ja'] as const) {
+  test(`Studio model picker works in ${locale}`, async ({ page, request }) => {
+    const id = await project(request, `Catalog locale ${locale}`);
+    await page.goto(`${locale === 'en' ? '' : `/${locale}`}/studio/${id}`);
+    const modelLabel = { en: 'Model', zh: '模型', ja: 'モデル' }[locale];
+    await page.getByRole('button', { name: modelLabel, exact: true }).click();
+    await page.getByRole('option', { name: 'Qwen Image 2.1', exact: true }).click();
+    await expect(page.getByRole('button', { name: modelLabel, exact: true })).toContainText('Qwen Image 2.1');
+    await expect(page.locator('textarea').first()).toBeVisible();
+  });
+}
