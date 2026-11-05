@@ -72,7 +72,7 @@ export function EcommerceMaterialPanel({projectId,cards,flush,runTask,onCreateNo
     for(const item of files.filter(item=>item.sku===name)){item.bound=true;update(item.id,{bound:true});}
    }
    for(const item of files){URL.revokeObjectURL(item.preview);previews.current.delete(item.preview);}
-   setWorkflowSku(target);setSku(target);setNewSku('');setColor('');setPreserve('');setProduct('');setFiles([]);await library.refetch();setNotice((allHaveProduct?t('saved'):t('needsProduct'))+(reused?' '+t('duplicateImportsReused')+' '+reused:''));
+   setWorkflowSku(target);setSku(target);setNewSku('');setColor('');setPreserve('');setProduct('');setFiles([]);await library.refetch();setNotice((allHaveProduct?t('saved'):t('needsProduct'))+(reused?' '+t('duplicateImportsReused')+' '+reused:''));setPanel('workflow');
   }catch(cause){setError(cause instanceof Error?cause.message:t('failed'));}finally{setBusy(false);}
  }
  function addFiles(incoming:File[]){
