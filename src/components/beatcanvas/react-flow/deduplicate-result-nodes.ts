@@ -3,6 +3,9 @@ import type {BeatCanvasFlowNode,BeatCanvasFlowEdge} from './beatcanvas-react-flo
 
 /** All take placements fold into their source node, independent of selected version.
  * Presentation only: never removes persisted cards or rewrites asset references. */
+/** SKU facts and composition templates are edited in the library and workflow panels, not on the canvas. */
+export const panelOnlyCard=(id:string)=>/^sku-[0-9a-f]{16}-(?:facts|composition-template)$/.test(id);
+
 /** Maps each folded card id to the visible node it is drawn inside. */
 export function foldedResultAliases(nodes:{id:string}[],cards:Record<string,CanvasCard>|undefined){
  const aliases=new Map<string,string>();
@@ -31,6 +34,7 @@ export function foldedResultAliases(nodes:{id:string}[],cards:Record<string,Canv
  * A SKU's folded cards only go when that SKU's own nodes are deleted, so another SKU's reuse survives. */
 export function foldedCardsToDelete(deleting:Set<string>,nodes:{id:string}[],cards:Record<string,CanvasCard>|undefined){
  const extra:string[]=[];
+ for(const node of nodes){const sku=/^(sku-[0-9a-f]+)-/.exec(node.id)?.[1];if(sku&&panelOnlyCard(node.id)&&!deleting.has(node.id)&&deleting.has(`${sku}-main-image`))extra.push(node.id);}
  for(const [id,target]of foldedResultAliases(nodes,cards)){
   if(deleting.has(id))continue;
   const sku=/^(sku-[0-9a-f]+)-/.exec(id)?.[1];
@@ -43,7 +47,8 @@ export function deduplicateResultNodes(nodes:BeatCanvasFlowNode[],edges:BeatCanv
  if(!cards)return {nodes,edges};
  const aliases=foldedResultAliases(nodes,cards);
  const seen=new Set<string>();
- return {nodes:nodes.filter(node=>!aliases.has(node.id)),edges:edges.flatMap(edge=>{
+ return {nodes:nodes.filter(node=>!aliases.has(node.id)&&!panelOnlyCard(node.id)),edges:edges.flatMap(edge=>{
+  if(panelOnlyCard(edge.source)||panelOnlyCard(edge.target))return [];
   const source=aliases.get(edge.source)||edge.source,target=aliases.get(edge.target)||edge.target;
   const key=JSON.stringify([source,target]);
   if(source===target||seen.has(key))return [];

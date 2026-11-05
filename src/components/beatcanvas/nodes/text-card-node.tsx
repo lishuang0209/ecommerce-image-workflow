@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useTranslations } from '@/core/workspace-lib/shims/next-intl';
 import type { CanvasTextRole } from '@/core/beatcanvas/canvas-types';
 import { MAX_TEXT_NODE_CHARS } from '@/core/beatcanvas/text-nodes';
-import { ecommercePromptPattern } from '@/core/demo/ecommerce-contract';
+import { ecommercePromptPattern, parseCompositionTemplate } from '@/core/demo/ecommerce-contract';
 import { useCanvasFrontLayer } from '../beatcanvas-front-layer-context';
 import type { BeatCanvasFlowNode } from '../react-flow/beatcanvas-react-flow-types';
 
@@ -17,6 +17,7 @@ export function TextCardNode({
     useCanvasFrontLayer();
   const card = cards[id];
   const t = useTranslations('AppShell.studio.textNode');
+  const et = useTranslations('AppShell.studio.ecommerce');
   const [title, setTitle] = useState(card?.name ?? '');
   useEffect(() => setTitle(card?.name ?? ''), [card?.name]);
   const [task, setTask] = useState<'main' | 'scene'>(id.includes('-scene-') || /scene/i.test(card?.name || '') ? 'scene' : 'main');
@@ -25,6 +26,16 @@ export function TextCardNode({
   const [error, setError] = useState('');
   const sourceState = JSON.stringify(card?.referenceCardIds.map(reference => [reference, cards[reference]?.textContent]));
   if (card?.kind !== 'text') return null;
+  const skuPrompt = ecommercePromptPattern.exec(id);
+  const facts = skuPrompt ? cards[`${skuPrompt[1]}-facts`] : undefined;
+  const productName = facts?.kind === 'text' ? /商品：([^；\n]+)/.exec(facts.textContent)?.[1] : undefined;
+  const templateCard = skuPrompt?.[2] === 'main' ? cards[`${skuPrompt[1]}-composition-template`] : undefined;
+  const template = templateCard?.kind === 'text' ? parseCompositionTemplate(templateCard.textContent) : null;
+  const short = (key: string) => et(key).replace(/（.*?）|\(.*?\)/g, '').trim();
+  const summary = [
+    productName && `${et('productName')}：${productName}`,
+    template?.count && template.facing && template.scale && `${et('templateTitle')}：${short('template_count_' + template.count)} / ${short('template_facing_' + template.facing)} / ${short('template_scale_' + template.scale)}`,
+  ].filter(Boolean).join(' · ');
   const sourceChanged = draft !== null && (draft.original !== card.textContent || draft.source !== sourceState);
   async function generatePrompt() {
     if (!onGenerateTextPrompt || card?.kind !== 'text') return;
@@ -97,6 +108,7 @@ export function TextCardNode({
             )}
           </select>
         </header>
+        {summary && <p title={summary} className="truncate border-b border-white/10 px-3 py-2 text-[11px] text-[var(--beat-text-3)]">{summary}</p>}
         <textarea
           aria-label={t('content')}
           placeholder={t('placeholder')}

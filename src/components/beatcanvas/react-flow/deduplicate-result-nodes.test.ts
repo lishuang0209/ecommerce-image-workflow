@@ -49,3 +49,16 @@ test('deleting a host also deletes its folded cards, but keeps another SKU reusi
  assert.deepEqual(foldedCardsToDelete(new Set([white+'-main-image']),nodes,cards).sort(),['out','result:out',white+'-adopted-main',white+'-composition-master'].sort());
  assert.ok(foldedCardsToDelete(new Set([white+'-main-image',black+'-main-image']),nodes,cards).includes(black+'-master-reference'));
 });
+
+test('SKU facts and templates stay off the canvas but are deleted with their SKU main image',()=>{
+ const sku='sku-0123456789abcdef';
+ const text=(id:string)=>({...buildTextCard({id,name:id}),kind:'text'});
+ const cards={[sku+'-facts']:text(sku+'-facts'),[sku+'-composition-template']:text(sku+'-composition-template'),[sku+'-main-prompt']:text(sku+'-main-prompt'),[sku+'-main-image']:{...buildTextCard({id:sku+'-main-image',name:'Main'}),kind:'generation',type:'image'}} as Record<string,CanvasCard>;
+ const nodes=Object.keys(cards).map(id=>({id,position:{x:0,y:0},data:{meta:{},props:{w:100,h:100}}})) as BeatCanvasFlowNode[];
+ const edges=[{id:'a',source:sku+'-facts',target:sku+'-main-prompt'},{id:'b',source:sku+'-main-prompt',target:sku+'-main-image'}] as BeatCanvasFlowEdge[];
+ const shown=deduplicateResultNodes(nodes,edges,cards);
+ assert.deepEqual(shown.nodes.map(node=>node.id).sort(),[sku+'-main-image',sku+'-main-prompt'].sort());
+ assert.deepEqual(shown.edges.map(edge=>edge.id),['b']);
+ assert.deepEqual(foldedCardsToDelete(new Set([sku+'-main-image']),nodes,cards).sort(),[sku+'-composition-template',sku+'-facts'].sort());
+ assert.deepEqual(foldedCardsToDelete(new Set([sku+'-main-prompt']),nodes,cards),[]);
+});
