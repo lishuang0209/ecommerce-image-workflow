@@ -57,7 +57,7 @@ export function EcommerceWorkflowPanel({projectId,cards,flush,runTask,activeSku,
  const input='min-h-10 w-full rounded border border-white/15 bg-[var(--beat-surface)] px-2 text-xs';
  return <div className="space-y-4">
   {!skus.length&&<p className="text-xs">{t('importFirst')}</p>}
-  {(mainRows.filter(row=>row.ready).length>1||!!stop?.batch)&&<section aria-label={t('batchMainTitle')} className="space-y-2 rounded-xl border border-white/10 bg-white/[0.02] p-3">
+  {((mainRows.filter(row=>row.ready).length>1&&mainRows.some(row=>row.ready&&!cards[`${row.prefix}-adopted-main`]?.assetId))||!!stop?.batch)&&<section aria-label={t('batchMainTitle')} className="space-y-2 rounded-xl border border-white/10 bg-white/[0.02] p-3">
    <div className="flex items-center justify-between text-xs"><h3>{t('batchMainTitle')}</h3><span className="text-[var(--beat-text-3)]">{batchIds.length}/{mainRows.filter(row=>row.ready).length}</span></div>
    <p className="text-[11px] leading-5 text-[var(--beat-text-3)]">{t('batchMainHint')}</p>
    {mainRows.filter(row=>row.ready).map(row=>{const results=Object.values(cards).filter(card=>card.kind==='output'&&card.status==='succeeded'&&card.assetId&&card.sourceConfigCardId===row.task?.id).length;const pinned=!!cards[`${row.prefix}-adopted-main`]?.assetId;const processing=row.task?.status==='pending'||row.task?.status==='processing';
@@ -91,15 +91,16 @@ export function EcommerceWorkflowPanel({projectId,cards,flush,runTask,activeSku,
    return <section key={item.sku} className="space-y-3">
     <ol aria-label={t('workflowSteps')} className="grid grid-cols-3 gap-1 rounded-lg bg-white/[0.04] p-2 text-[11px]">{[t('stepMain'),t('stepAdopt'),t('stepScenes')].map((label,index)=><li key={label} className={'flex items-center gap-1.5 py-1 '+((index===0&&candidates.length>0)||(index===1&&!!pin?.assetId)||(index===2&&sceneTasks.length>0&&completedScenes===sceneTasks.length)?'text-green-300':'text-[var(--beat-text-3)]')}><span className="flex size-5 shrink-0 items-center justify-center rounded-full border border-current">{index+1}</span>{label}</li>)}</ol>
     {!workflowComplete?<button type="button" disabled={busy} className="min-h-11 w-full rounded-lg border border-white/20 text-xs disabled:opacity-40" onClick={()=>void action(item.sku,'workflow')}>{t(hasWorkflow?'ensureWorkflow':'createWorkflowOnly')}</button>:<p className="text-[11px] text-[var(--beat-text-3)]">✓ {t('workflowReady')}</p>}
-    {workflowComplete&&<section aria-label={t('simpleComposition')} className="space-y-2 rounded-lg bg-white/[0.03] p-3">
-     <div className="flex items-center justify-between gap-2 text-xs"><h3>{t('simpleComposition')}</h3><span className="max-w-[65%] truncate text-[var(--beat-text-3)]">{applied&&appliedSku?t('compositionReusedShort',{sku:appliedSku}):t('independentShort')}</span></div>
-     {reusable.length>0?<>
+    {/* Once a composition is chosen or the main image is adopted, the choice is settled and stays folded. */}
+    {workflowComplete&&<details key={applied||pin?.assetId?'settled':'open'} open={!applied&&!pin?.assetId} aria-label={t('simpleComposition')} className="space-y-2 rounded-lg bg-white/[0.03] px-3">
+     <summary className="flex min-h-10 cursor-pointer items-center justify-between gap-2 text-xs"><h3>{t('simpleComposition')}</h3><span className="max-w-[65%] truncate text-[var(--beat-text-3)]">{applied&&appliedSku?t('compositionReusedShort',{sku:appliedSku}):t('independentShort')} ▾</span></summary>
+     <div className="space-y-2 pb-3">{reusable.length>0?<>
       <p className="text-[11px] leading-5 text-[var(--beat-text-3)]">{t('reuseCompositionHint')}</p>
       {reusable.map(other=>{const url=cards[`${other.prefix}-adopted-main`]?.url;const current=appliedSku===other.sku&&applied?.assetId===cards[`${other.prefix}-adopted-main`]?.assetId;
        return <button key={other.prefix} type="button" disabled={busy||current} aria-pressed={current} className={'flex min-h-14 w-full items-center gap-3 rounded-lg border p-2 text-left text-xs disabled:cursor-default '+(current?'border-orange-400':'border-white/15 hover:bg-white/5')} onClick={()=>void reuseComposition(item.sku,other)}>{url&&<img src={url} alt={other.sku} className="size-10 shrink-0 rounded bg-white object-contain"/>}<span className="min-w-0 flex-1">{t('reuseCompositionOf',{sku:other.sku})}</span>{current&&<span className="text-green-300">✓</span>}</button>;})}
       <button type="button" disabled={busy||!applied} aria-pressed={!applied} className={'min-h-10 w-full rounded-lg border px-2 text-left text-xs disabled:cursor-default '+(!applied?'border-orange-400':'border-white/15 hover:bg-white/5')} onClick={()=>void action(item.sku,'workflow',{clearMaster:true})}>{t('independentComposition')}{!applied&&<span className="float-right text-green-300">✓</span>}</button>
-     </>:<p className="text-xs leading-5 text-[var(--beat-text-3)]">{t('noReusableMain')}</p>}
-    </section>}
+     </>:<p className="text-xs leading-5 text-[var(--beat-text-3)]">{t('noReusableMain')}</p>}</div>
+    </details>}
     <section aria-label={t('mainTaskTitle')} className="space-y-3 rounded-xl border border-white/10 bg-white/[0.02] p-3">
      <div className="flex items-center justify-between text-xs"><h3>{t('mainTaskTitle')}</h3><span className={pin?.assetId?'text-green-300':'text-[var(--beat-text-3)]'}>{t(!mainPromptReady?'promptNeedsReview':pin?.assetId?'adoptedShort':candidates.length?'awaitingAdoption':'awaitingGeneration')}</span></div>
      <div className="flex items-center gap-3">
@@ -132,7 +133,7 @@ export function EcommerceWorkflowPanel({projectId,cards,flush,runTask,activeSku,
   {adopted.length>1&&<details className="space-y-2 pt-3"><summary className="cursor-pointer text-xs">{t('compareTitle')}</summary><p className="text-xs leading-6 text-[var(--beat-text-3)]">{t('compareHint')}</p><div className="grid grid-cols-2 gap-2">{adopted.map(item=><figure key={item.prefix}><img src={cards[`${item.prefix}-adopted-main`].url!} alt={item.sku} className="aspect-square w-full rounded bg-white object-contain"/><figcaption className="mt-1 text-xs">{item.sku}</figcaption></figure>)}</div></details>}
   {notice&&<p role="status" className="text-xs leading-6 text-green-300">{notice}</p>}
   {error&&<p role="alert" className="text-xs leading-6 text-red-300">{error}</p>}
-  {tasks.some(task=>task.id.includes('-scene-'))&&<div className="sticky -bottom-4 z-10 space-y-2 bg-[var(--beat-surface)] py-3">
+  {(selected.some(id=>tasks.some(task=>task.id===id&&task.id.includes('-scene-')))||(!!stop&&!stop.batch))&&<div className="sticky -bottom-4 z-10 space-y-2 bg-[var(--beat-surface)] py-3">
    <p className="text-[11px] text-[var(--beat-text-3)]">{t('paidSelectionShort')} · {selected.filter(id=>tasks.some(task=>task.id===id&&isEcommerceTaskPromptReady(task,cards)&&(task.id.endsWith('-main-image')||cards[task.id.replace(/-scene.*$/,'-adopted-main')]?.assetId))).length} {t('paidTasks')}</p>
    <button type="button" disabled={busy||!selected.some(id=>tasks.some(task=>task.id===id&&isEcommerceTaskPromptReady(task,cards)&&(task.id.endsWith('-main-image')||cards[task.id.replace(/-scene.*$/,'-adopted-main')]?.assetId)))} className="min-h-11 w-full rounded-lg bg-[var(--beat-accent)] px-3 text-sm text-black disabled:opacity-40" onClick={()=>void execute()}>{stop&&!stop.batch?t('taskRunningShort')+' '+progress:t('generateSelectedShort')+' · '+selected.filter(id=>tasks.some(task=>task.id===id&&isEcommerceTaskPromptReady(task,cards)&&(task.id.endsWith('-main-image')||cards[task.id.replace(/-scene.*$/,'-adopted-main')]?.assetId))).length}</button>
    {stop&&!stop.batch&&<button type="button" className="min-h-10 w-full text-xs" onClick={()=>{stop.requested=true;setNotice(t('stopAfterCurrent'));}}>{t('stop')}</button>}
