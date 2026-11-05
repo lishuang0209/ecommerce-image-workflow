@@ -681,6 +681,7 @@
         "resizePadShort": "Padded",
         "resizeDelete": "Delete",
         "resizeDeleteConfirm": "Delete this resized image? The original is not affected.",
+        "resizeOldVersion": " (older version)",
         "resizeEarlier": "Earlier methods",
         "resizeCropWarn": "Centre crop cuts the edges and may cut off a product that is not centred. Prefer Auto or Pad when the ratios differ a lot.",
         "resizeAuto": "Auto (pad main images; crop scenes only for similar ratios, otherwise pad)",

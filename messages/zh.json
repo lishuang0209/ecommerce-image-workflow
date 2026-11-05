@@ -681,6 +681,7 @@
         "resizePadShort": "留白补边",
         "resizeDelete": "删除",
         "resizeDeleteConfirm": "删除这张尺寸图？原图不受影响。",
+        "resizeOldVersion": "（旧版本）",
         "resizeEarlier": "更早的处理方式",
         "resizeCropWarn": "居中裁剪会切掉边缘，商品不在正中时可能被切到。比例相差大时建议用自动或留白补边。",
         "resizeAuto": "自动（主图留白补边；场景比例相近时裁剪，差距大时补边）",

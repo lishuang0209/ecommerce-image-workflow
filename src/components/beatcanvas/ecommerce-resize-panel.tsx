@@ -41,7 +41,9 @@ export function EcommerceResizePanel({ projectId, cards }: { projectId: string; 
       await reload();
     } catch (cause) { setError(cause instanceof Error ? cause.message : t('failed')); } finally { setBusy(false); }
   }
-  const labelOf = (assetId: string, fallback: string) => (sources.find(row => row.assetId === assetId)?.label || fallback).replace(/^.* · /, '');
+  // A source that is no longer the adopted main or the latest scene result is an older version.
+  const isCurrent = (assetId: string) => sources.some(row => row.assetId === assetId);
+  const taskName = (item: Derived) => item.task === 'main' ? t('mainTaskTitle') : (Object.values(cards).find(card => card.kind === 'generation' && card.id.endsWith(`-${item.task}-image`) && card.name.startsWith(item.sku + ' · '))?.name || item.filename).replace(/^.* · /, '');
   // The list arrives oldest first, so a larger index means a newer result. Each source keeps its newest method on top.
   const groups = useMemo(() => {
     const bySku = new Map<string, Map<string, Map<string, { newest: number; sizes: Derived[] }>>>();
@@ -54,8 +56,9 @@ export function EcommerceResizePanel({ projectId, cards }: { projectId: string; 
     return [...bySku].map(([sku, skus]) => ({ sku, items: [...skus].map(([sourceId, methods]) => {
       const first = derived.find(item => item.sourceAssetId === sourceId)!;
       const ordered = [...methods].map(([mode, value]) => ({ mode, newest: value.newest, sizes: [...value.sizes].sort((x, y) => x.ratio.localeCompare(y.ratio)) })).sort((x, y) => y.newest - x.newest);
-      return { sourceId, label: labelOf(sourceId, first.task === 'main' ? t('mainTaskTitle') : first.filename), methods: ordered };
-    }) }));
+      const current = isCurrent(sourceId);
+      return { sourceId, current, label: taskName(first) + (current ? '' : t('resizeOldVersion')), methods: ordered };
+    }).sort((x, y) => Number(y.current) - Number(x.current)) }));
   }, [derived, sources]);
   const modeLabel = (mode: string) => t(mode === 'crop' ? 'resizeCropShort' : 'resizePadShort');
   const zipName = (sku: string, label: string, size: Derived) => `${sku}_${label}_${size.ratio.replace(':', 'x')}_${size.mode}.png`.replace(/[\\/:*?"<>|]/g, '-');
@@ -104,11 +107,11 @@ export function EcommerceResizePanel({ projectId, cards }: { projectId: string; 
           const tiles = (method: (typeof item.methods)[number]) => <div key={method.mode} className="space-y-1"><p className="text-[11px] text-[var(--beat-text-3)]">{modeLabel(method.mode)}</p>
             <div className="grid grid-cols-3 gap-2">{method.sizes.map(size => <figure key={size.id} className="space-y-1">
               <a href={size.url} target="_blank" rel="noreferrer"><img src={size.url} alt={item.label + ' ' + size.ratio} className="aspect-square w-full rounded bg-white/5 object-contain" /></a>
-              <figcaption className="space-y-0.5 text-[11px]"><span className="block text-[var(--beat-text-3)]">{size.ratio} · {modeLabel(size.mode)}</span>
+              <figcaption className="space-y-0.5 text-[11px]"><span className="block text-[var(--beat-text-3)]">{size.ratio}</span>
                 <span className="flex items-center justify-between"><a href={size.url} download={zipName(group.sku, item.label, size)} className="text-orange-400">{t('resizeDownload')}</a>
                 <button type="button" disabled={busy} className="text-[var(--beat-text-3)] hover:text-red-300 disabled:opacity-40" onClick={() => void remove(size.id)}>{t('resizeDelete')}</button></span></figcaption>
             </figure>)}</div></div>;
-          return <div key={item.sourceId} className="space-y-1"><p className="truncate text-xs text-[var(--beat-text-2)]">{item.label}</p>
+          return <div key={item.sourceId} className="space-y-1"><p className={'truncate text-xs '+(item.current?'text-[var(--beat-text-2)]':'text-[var(--beat-text-3)]')}>{item.label}</p>
             {tiles(item.methods[0])}
             {item.methods.length > 1 && <details><summary className="min-h-9 cursor-pointer py-1 text-[11px] text-[var(--beat-text-3)]">{t('resizeEarlier')} · {item.methods.length - 1} ▾</summary><div className="space-y-2">{item.methods.slice(1).map(tiles)}</div></details>}
           </div>;

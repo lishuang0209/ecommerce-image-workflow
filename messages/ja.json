@@ -681,6 +681,7 @@
         "resizePadShort": "余白追加",
         "resizeDelete": "削除",
         "resizeDeleteConfirm": "このサイズ画像を削除しますか？元画像には影響しません。",
+        "resizeOldVersion": "（旧バージョン）",
         "resizeEarlier": "以前の処理方法",
         "resizeCropWarn": "中央トリミングは端を切り落とし、商品が中央にないと切れる場合があります。比率の差が大きいときは自動か余白追加を使ってください。",
         "resizeAuto": "自動（メインは余白追加、シーンは比率が近い場合のみトリミング、それ以外は余白追加）",
