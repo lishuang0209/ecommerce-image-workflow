@@ -1,7 +1,8 @@
-import { readFile } from 'node:fs/promises';
+import sharp from 'sharp';
+import { readFile, unlink } from 'node:fs/promises';
 import { LOCAL_PROJECT_ASSET_BUCKET, persistLocalProjectAsset, resolveLocalProjectAssetPath } from '@/core/projects/local-project-assets';
-import { getProjectAssetById, linkProjectAsset, listProjectAssets, recordUserAsset } from '@/core/workspace-lib/assets/user-assets';
-import { resizeRatios, resizeToRatio, type ResizeMode, type ResizeRatio } from './image-resize';
+import { deleteUserAssetById, getProjectAssetById, linkProjectAsset, listProjectAssets, recordUserAsset } from '@/core/workspace-lib/assets/user-assets';
+import { autoResizeMode, resizeRatios, resizeToRatio, type ResizeMode, type ResizeRatio } from './image-resize';
 
 export type ResizeChoice = 'auto' | ResizeMode;
 type SourceOutput = { sku?: string; task?: string; ratio?: string; preserve?: string; color?: string };
@@ -37,9 +38,10 @@ export async function deriveResizedAssets({ projectId, assetIds, ratios, mode }:
     const asset = await getProjectAssetById({ projectId, assetId: sourceId });
     const output = outputMeta(asset?.metadata);
     if (!asset || asset.type !== 'image' || asset.source !== 'provider' || asset.storageProvider !== 'local' || asset.bucket !== LOCAL_PROJECT_ASSET_BUCKET || !output?.sku || !output.task) throw new Error('Only saved ecommerce results can be resized.');
-    const effective: ResizeMode = mode === 'auto' ? (output.task === 'main' ? 'pad' : 'crop') : mode;
     const original = await readFile(resolveLocalProjectAssetPath({ objectKey: asset.objectKey }));
+    const dimensions = await sharp(original).metadata();
     for (const ratio of wanted) {
+      const effective: ResizeMode = mode === 'auto' ? autoResizeMode(output.task, dimensions.width || 1, dimensions.height || 1, ratio) : mode;
       const found = existing.find(item => item.sourceAssetId === sourceId && item.ratio === ratio && item.mode === effective);
       if (found) { results.push({ ...found, created: false }); continue; }
       const resized = await resizeToRatio({ bytes: original, ratio, mode: effective });
@@ -60,4 +62,12 @@ export async function deriveResizedAssets({ projectId, assetIds, ratios, mode }:
     }
   }
   return results;
+}
+
+/** Removes one derived size only. Originals and generated results are never touched. */
+export async function deleteDerivedSize({ projectId, assetId }: { projectId: string; assetId: string }) {
+  const asset = await getProjectAssetById({ projectId, assetId });
+  if (!asset || asset.source !== 'derived' || !resizeMeta(asset.metadata)?.sourceAssetId || asset.storageProvider !== 'local' || asset.bucket !== LOCAL_PROJECT_ASSET_BUCKET) throw new Error('Only resized images can be deleted here.');
+  await unlink(resolveLocalProjectAssetPath({ objectKey: asset.objectKey })).catch(() => undefined);
+  await deleteUserAssetById(assetId);
 }

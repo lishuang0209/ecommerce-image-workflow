@@ -42,3 +42,11 @@ test('centre crop keeps the centred subject and drops the edges', async () => {
 test('unsupported ratios are rejected', async () => {
   await assert.rejects(async () => resizeToRatio({ bytes: await whiteMain(), ratio: '5:7' as ResizeRatio, mode: 'crop' }), /Unsupported/);
 });
+
+test('auto mode keeps main images whole and only crops scenes for small ratio changes', async () => {
+  const { autoResizeMode } = await import('./image-resize');
+  assert.equal(autoResizeMode('main', 1024, 1024, '9:16'), 'pad');
+  assert.equal(autoResizeMode('scene-abc', 1024, 1280, '3:4'), 'crop');
+  assert.equal(autoResizeMode('scene-abc', 1024, 1280, '1:1'), 'pad');
+  assert.equal(autoResizeMode('scene-abc', 1024, 1280, '9:16'), 'pad');
+});

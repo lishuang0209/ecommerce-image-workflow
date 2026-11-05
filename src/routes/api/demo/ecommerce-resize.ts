@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { z } from 'zod';
-import { deriveResizedAssets, listDerivedSizes } from '@/core/demo/ecommerce-resize';
+import { deleteDerivedSize, deriveResizedAssets, listDerivedSizes } from '@/core/demo/ecommerce-resize';
 import { resizeRatios } from '@/core/demo/image-resize';
 import { validateTrustedWorkspaceJsonMutation } from '@/lib/trusted-local-request';
 import { readRequestJsonWithLimit } from '@/lib/request-body-limit';
@@ -28,4 +28,15 @@ async function POST({ request }: { request: Request }) {
     return Response.json({ error: error instanceof Error ? error.message : 'Unable to resize images.' }, { status: 400 });
   }
 }
-export const Route = createFileRoute('/api/demo/ecommerce-resize')({ server: { handlers: { GET, POST } } });
+async function DELETE({ request }: { request: Request }) {
+  const trust = validateTrustedWorkspaceJsonMutation(request);
+  if (!trust.ok) return Response.json({ error: trust.message }, { status: trust.status });
+  try {
+    const input = z.object({ projectId: z.string().uuid(), assetId: z.string().uuid() }).strict().parse(await readRequestJsonWithLimit(request, 1024));
+    await deleteDerivedSize(input);
+    return Response.json({ ok: true });
+  } catch (error) {
+    return Response.json({ error: error instanceof Error ? error.message : 'Unable to delete resized image.' }, { status: 400 });
+  }
+}
+export const Route = createFileRoute('/api/demo/ecommerce-resize')({ server: { handlers: { GET, POST, DELETE } } });

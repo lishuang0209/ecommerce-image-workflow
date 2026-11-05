@@ -41,3 +41,13 @@ export async function resizeToRatio({ bytes, ratio, mode }: { bytes: Uint8Array;
   const output = await pipeline.png().toBuffer();
   return { bytes: output, width, height };
 }
+
+/** Largest aspect-ratio gap a scene image may be centre-cropped across; beyond it the product could be cut off. */
+export const AUTO_CROP_LIMIT = 1.15;
+/** Auto mode: main images keep the whole picture with margins; scenes crop only for small ratio changes, otherwise pad. */
+export function autoResizeMode(task: string, sourceWidth: number, sourceHeight: number, ratio: ResizeRatio): ResizeMode {
+  if (task === 'main') return 'pad';
+  const [width, height] = resizeTargets[ratio];
+  const gap = Math.max((sourceWidth / sourceHeight) / (width / height), (width / height) / (sourceWidth / sourceHeight));
+  return gap <= AUTO_CROP_LIMIT ? 'crop' : 'pad';
+}
