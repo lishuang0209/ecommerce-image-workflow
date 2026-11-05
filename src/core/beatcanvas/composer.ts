@@ -296,6 +296,9 @@ export const canUseCanvasCardAsGenerationReference = ({
     return sourceCard.type === 'video';
   }
 
+  // Text cards supply prompt context rather than media attachments.
+  if (sourceCard.kind === 'text') return true;
+
   if (sourceCard.type === 'image') {
     return true;
   }

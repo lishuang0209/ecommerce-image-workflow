@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
-test('keeps the sidebar outside the React Flow Suspense fallback', () => {
+test('keeps the unified canvas tools outside the React Flow Suspense fallback', () => {
   const source = readFileSync(
     new URL('./beatcanvas-shell.tsx', import.meta.url),
     'utf8'
@@ -12,14 +12,15 @@ test('keeps the sidebar outside the React Flow Suspense fallback', () => {
     '<Suspense fallback={<BeatCanvasLoading />}>'
   );
   const suspenseEnd = source.indexOf('</Suspense>', suspenseStart);
-  const sidebarStart = source.indexOf('<BeatCanvasSidebar');
+  const sidebarStart = source.indexOf('<EcommerceMaterialPanel');
+  assert.doesNotMatch(source, /<BeatCanvasSidebar/);
 
   assert.notEqual(suspenseStart, -1);
   assert.notEqual(suspenseEnd, -1);
   assert.notEqual(sidebarStart, -1);
   assert.ok(
-    sidebarStart > suspenseEnd,
-    'BeatCanvasSidebar should render outside the React Flow Suspense boundary'
+    sidebarStart < suspenseStart || sidebarStart > suspenseEnd,
+    'Unified canvas tools should render outside the React Flow Suspense boundary'
   );
 });
 

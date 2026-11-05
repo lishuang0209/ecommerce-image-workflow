@@ -1,3 +1,4 @@
+import {deduplicateResultNodes} from './deduplicate-result-nodes';
 import {
   Background,
   BackgroundVariant,
@@ -1133,8 +1134,7 @@ function BeatCanvasReactFlowCanvas({
   const displayGraph = useMemo(() => {
     if (!organization || !canvasCards)
       return {
-        nodes,
-        edges,
+        ...deduplicateResultNodes(nodes,edges,canvasCards),
         historyGroups: [] as Array<{
           generationCardId: string;
           outputCardIds: string[];
@@ -1319,8 +1319,7 @@ function BeatCanvasReactFlowCanvas({
       }
     );
     return {
-      nodes: [...groups, ...real],
-      edges: projectedEdges,
+      ...deduplicateResultNodes([...groups, ...real],projectedEdges,canvasCards),
       historyGroups: projection.historyGroups,
     };
   }, [

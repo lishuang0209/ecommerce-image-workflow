@@ -2,7 +2,6 @@ import { apiJsonPost } from '@/lib/api-client';
 import { EcommerceMaterialPanel } from './ecommerce-material-panel';
 import { VIDEO_ANALYSIS_MODEL_ID } from '@/core/effects/video-analysis';
 import { getTemplateGenerationBlockers } from '@/core/workflows/workflow-template';
-import { CanvasOrganizationPanel } from './organization-panel';
 import {
   invalidateWorkspaceAfterAssetMutation,
   invalidateWorkspaceAfterGeneration,
@@ -66,7 +65,6 @@ import { useBeatCanvasGraph } from './use-beatcanvas-graph';
 import { useBeatCanvasDraftActions } from './use-beatcanvas-draft-actions';
 import { useBeatCanvasGenerationRuntime } from './use-beatcanvas-generation-runtime';
 import {
-  type UploadIntent,
   useBeatCanvasUploadActions,
 } from './use-beatcanvas-upload-actions';
 import {
@@ -80,7 +78,6 @@ import {
   isDownloadableCanvasCard,
   resolveBatchCanvasCardSelection,
 } from './beatcanvas-media-preview';
-import BeatCanvasSidebar from './beatcanvas-sidebar';
 import { BeatCanvasLoading } from './beatcanvas-loading';
 
 /**
@@ -257,6 +254,7 @@ export function BeatCanvasShell({
     handleSelectShape,
     handleSelectedCanvasCardIdsChange,
     insertAssetCard,
+    insertTextCard,
     pasteCanvasCards,
     createGenerationOutput,
     updateGenerationOutput,
@@ -412,10 +410,8 @@ export function BeatCanvasShell({
     handleUpload,
     mediaFileInputRef,
     imageFileInputRef,
-    openMediaUploadPicker,
     openUploadPicker,
     uploadFiles,
-    uploadIntent,
     videoFileInputRef,
   } = useBeatCanvasUploadActions({
     projectId,
@@ -1757,7 +1753,7 @@ export function BeatCanvasShell({
 
       {/* Canvas area */}
       <div className="relative flex-1 min-w-0">
-        {isWorkspaceReady && <EcommerceMaterialPanel projectId={projectId} cards={canvasCards} flush={() => snapshotFlushRef.current()} runTask={id => runGenerateDraft(id, { suppressResultFocus: true })} />}
+        {isWorkspaceReady && <EcommerceMaterialPanel onCreateNode={type=>type==='text'?insertTextCard():handleCreatePromptDraft('image')} onInsertAsset={asset=>insertProjectAsset({...asset,projectId})} projectId={projectId} cards={canvasCards} flush={() => snapshotFlushRef.current()} runTask={id => runGenerateDraft(id, { suppressResultFocus: true })} />}
         <BeatCanvasFrontLayerProvider value={frontLayerValue}>
           <Suspense fallback={<BeatCanvasLoading />}>
             <BeatCanvasReactFlowEditor
@@ -1776,33 +1772,7 @@ export function BeatCanvasShell({
           </Suspense>
         </BeatCanvasFrontLayerProvider>
 
-        {isWorkspaceReady && <CanvasOrganizationPanel
-          projectId={projectId}
-          selectedCardIds={selectedCanvasCardIds}
-          getDocument={buildProjectSnapshotDocument}
-          flush={snapshotLifecycle.flush}
-          acceptSnapshot={(document, revision) => {
-            recordCanvasHistory();
-            snapshotLifecycle.acceptExternalSnapshot(document, revision);
-          }}
-          onLocate={(id) => {
-            handleSelectShape(id);
-            focusShape(id);
-          }}
-        />}
         <div className="pointer-events-none absolute inset-0">
-          {/* Floating Left Toolbar */}
-          <BeatCanvasSidebar
-            projectId={projectId}
-            disabled={!isWorkspaceReady}
-            onUploadMedia={openMediaUploadPicker}
-            onCreateImageDraft={() => handleCreatePromptDraft('image')}
-            onInsertHistoryAsset={(asset) =>
-              insertProjectAsset({ ...asset, projectId })
-            }
-            uploadIntent={uploadIntent as UploadIntent | null}
-          />
-
           {showContextToolbar ? (
             <Suspense fallback={null}>
               <BeatCanvasContextToolbar

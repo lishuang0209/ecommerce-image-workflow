@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { buildTextCard } from './text-nodes';
 
 import type { WorkspaceModelOption } from '@/core/effects/workspace-models';
 import type { CanvasCard, CanvasGenerationCard } from './canvas-types';
@@ -407,4 +408,13 @@ test('preserves every compatible reference video in attachment order', () => {
       ],
     }
   );
+});
+
+
+test('text connectors can create image and video drafts but not analysis references', () => {
+  const sourceCard = buildTextCard({id:'prompt-note',name:'Prompt',textContent:'White background product photo'});
+  for (const targetType of ['image','video'] as const) {
+    assert.equal(canUseCanvasCardAsGenerationReference({sourceCard,targetType,targetModel:makeModel()}),true);
+  }
+  assert.equal(canUseCanvasCardAsGenerationReference({sourceCard,targetType:'video',targetModel:makeModel(),targetGenerationMode:'analysis'}),false);
 });

@@ -18,11 +18,15 @@ import { cn } from '@/lib/utils';
 export function HistoryPanel({
   onSelectAsset,
   projectId,
+  excludeAssetIds = [],
+  heading,
 }: {
   onSelectAsset: (
     asset: RecentAsset & { mediaType: 'image' | 'video' | 'audio' }
   ) => void;
   projectId?: string | null;
+  excludeAssetIds?: string[];
+  heading?: string;
 }) {
   const t = useTranslations('AppShell.studio');
   const { data, isLoading, isError } = useQuery({
@@ -31,9 +35,10 @@ export function HistoryPanel({
     staleTime: 60 * 1000,
   });
 
-  const images = data?.images ?? [];
-  const videos = data?.videos ?? [];
-  const audios = data?.audios ?? [];
+  const excluded=new Set(excludeAssetIds);
+  const images = (data?.images ?? []).filter(asset=>!excluded.has(asset.id));
+  const videos = (data?.videos ?? []).filter(asset=>!excluded.has(asset.id));
+  const audios = (data?.audios ?? []).filter(asset=>!excluded.has(asset.id));
   const loading = isLoading;
   const error = isError ? t('sidebar.loadFailed') : null;
 
@@ -42,7 +47,7 @@ export function HistoryPanel({
   return (
     <div className="flex flex-col p-2">
       <div className={cn(beatPanelLabelClassName, 'mb-2 px-2 pt-1')}>
-        {t('sidebar.recentAssetsTitle')}
+        {heading||t('sidebar.recentAssetsTitle')}
       </div>
 
       {loading ? (
