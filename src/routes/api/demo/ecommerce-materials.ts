@@ -5,6 +5,7 @@ import { createFileRoute } from '@tanstack/react-router';
 import { z } from 'zod';
 import { bindEcommerceMaterials, listEcommerceMaterials, editEcommerceMaterial,editEcommerceProfile,skuNodePrefix } from '@/core/demo/ecommerce-materials';
 import { ecommerceTagSchema, compositionTemplateSchema } from '@/core/demo/ecommerce-contract';
+import { deleteEcommerceAssets } from '@/core/demo/ecommerce-delete';
 import { validateTrustedWorkspaceJsonMutation } from '@/lib/trusted-local-request';
 import { readRequestJsonWithLimit } from '@/lib/request-body-limit';
 async function POST({request}:{request:Request}) {
@@ -33,4 +34,9 @@ async function PATCH({request}:{request:Request}){
  try{const input=z.union([z.object({projectId:z.string().uuid(),assetId:z.string().uuid(),tag:ecommerceTagSchema,expectedTag:ecommerceTagSchema}).strict(),z.object({projectId:z.string().uuid(),sku:ecommerceTagSchema.shape.sku,color:z.string().trim().max(100),preserve:z.string().trim().max(1000),product:z.string().trim().max(100).optional(),expected:z.array(z.object({assetId:z.string().uuid(),tag:ecommerceTagSchema}).strict()).min(1).max(500)}).strict()]).parse(await readRequestJsonWithLimit(request,1024*1024));return Response.json('expected' in input?await editEcommerceProfile(input):await editEcommerceMaterial(input));}
  catch(error){return Response.json({error:error instanceof Error?error.message:'Unable to save material tags.'},{status:400});}
 }
-export const Route=createFileRoute('/api/demo/ecommerce-materials')({server:{handlers:{GET,POST,PATCH}}});
+async function DELETE({request}:{request:Request}){
+ const trust=validateTrustedWorkspaceJsonMutation(request);if(!trust.ok)return Response.json({error:trust.message},{status:trust.status});
+ try{const input=z.object({projectId:z.string().uuid(),assetIds:z.array(z.string().uuid()).min(1).max(500).optional(),sku:ecommerceTagSchema.shape.sku.optional(),removeFromCanvas:z.boolean().optional()}).strict().refine(value=>!!value.assetIds!==!!value.sku,'Choose images or one SKU.').parse(await readRequestJsonWithLimit(request,64*1024));return Response.json(await deleteEcommerceAssets(input));}
+ catch(error){return Response.json({error:error instanceof Error?error.message:'Unable to delete images.'},{status:400});}
+}
+export const Route=createFileRoute('/api/demo/ecommerce-materials')({server:{handlers:{GET,POST,PATCH,DELETE}}});

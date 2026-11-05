@@ -173,6 +173,22 @@ export const listProjectAssets = async ({
     .limit(Math.max(1, Math.min(500, Math.floor(limit))));
 };
 
+/** Removes an asset from one project's library. The row and file are only deleted when no other project uses it. */
+export const removeAssetFromProject = async ({ projectId, assetId }: { projectId: string; assetId: string }) => {
+  const db = await getDb();
+  const members = await db.select({ projectId: projectAssetMembership.projectId }).from(projectAssetMembership).where(eq(projectAssetMembership.assetId, assetId));
+  if (members.some((member: { projectId: string }) => member.projectId !== projectId)) {
+    await db.delete(projectAssetMembership).where(and(eq(projectAssetMembership.assetId, assetId), eq(projectAssetMembership.projectId, projectId)));
+    return null;
+  }
+  const [asset] = await db.select({ objectKey: userAsset.objectKey, bucket: userAsset.bucket }).from(userAsset).where(eq(userAsset.id, assetId)).limit(1);
+  await db.delete(projectAssetMembership).where(eq(projectAssetMembership.assetId, assetId));
+  await db.delete(generationAssetLink).where(eq(generationAssetLink.assetId, assetId));
+  await db.update(generationHistory).set({ resultAssetId: null }).where(eq(generationHistory.resultAssetId, assetId));
+  await db.delete(userAsset).where(eq(userAsset.id, assetId));
+  return (asset as { objectKey: string | null; bucket: string | null } | undefined) ?? null;
+};
+
 export const deleteUserAssetById = async (assetId: string) => {
   const db = await getDb();
   await db.delete(userAsset).where(eq(userAsset.id, assetId));

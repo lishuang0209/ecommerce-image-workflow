@@ -1,14 +1,15 @@
 import {ImagePlus,FileText} from 'lucide-react';
 import {EcommerceSelect} from './ecommerce-select';
 import type {RecentAsset} from '@/core/workspace-lib/app/workspace-client-api';
-import {useQuery} from '@tanstack/react-query';
+import {useQuery,useQueryClient} from '@tanstack/react-query';
+import {recentAssetsKeys} from '@/core/workspace-lib/app/workspace-query-keys';
 import {EcommerceMaterialLibrary,type SavedEcommerceMaterial} from './ecommerce-material-library';
 import {EcommerceWorkflowPanel} from './ecommerce-workflow-panel';
 import {groupEcommerceMaterials,type EcommerceProfile} from '@/core/demo/ecommerce-profiles';
 import {Suspense,lazy,useEffect,useRef,useState,type ChangeEvent} from 'react';
 import type {CanvasCard} from '@/core/beatcanvas/canvas-types';
 import {uploadLocalProjectAsset} from '@/core/workspace-lib/app/local-project-asset-client';
-import {apiJsonPost,apiJsonGet} from '@/lib/api-client';
+import {apiJsonPost,apiJsonGet,apiJsonDelete} from '@/lib/api-client';
 import {useTranslations} from '@/core/workspace-lib/shims/next-intl';
 
 const ProjectAssetPicker=lazy(()=>import('./beatcanvas-sidebar-panels').then(mod=>({default:mod.HistoryPanel})));
@@ -18,6 +19,20 @@ export function EcommerceMaterialPanel({projectId,cards,flush,runTask,onCreateNo
  const [panel,setPanel]=useState<'library'|'import'|'workflow'|'nodes'|null>(cards['ecommerce-start']?'import':null);
  const library=useQuery({queryKey:['ecommerce-materials',projectId],queryFn:()=>apiJsonGet<{materials:SavedEcommerceMaterial[]}>(`/api/demo/ecommerce-materials?projectId=${encodeURIComponent(projectId)}`),enabled:panel!==null,refetchOnWindowFocus:true});
  const [workflowSku,setWorkflowSku]=useState('');
+ const queryClient=useQueryClient();
+ async function deleteAssets(body:{assetIds?:string[];sku?:string}){
+  if(!window.confirm(body.sku?t('deleteSkuConfirm',{sku:body.sku}):t('deleteAssetsConfirm')))return null;
+  await flush();
+  type Result={deleted:number;inUse:number;document:import('@/core/projects/project-snapshot').ProjectSnapshotDocument;version:number};
+  let result=await apiJsonDelete<Result>('/api/demo/ecommerce-materials',{projectId,...body});
+  if(result.inUse){
+   if(!window.confirm(t('deleteInUseConfirm',{count:result.inUse})))return null;
+   result=await apiJsonDelete<Result>('/api/demo/ecommerce-materials',{projectId,...body,removeFromCanvas:true});
+  }
+  onSavedSnapshot(result.document,result.version);
+  await Promise.all([library.refetch(),queryClient.invalidateQueries({queryKey:recentAssetsKeys.lists(projectId)})]);
+  return result.deleted;
+ }
  const [importSkuTouched,setImportSkuTouched]=useState(false);
  const [profiles,setProfiles]=useState<Record<string,EcommerceProfile>>({});
  const [sku,setSku]=useState(''),[newSku,setNewSku]=useState(''),[color,setColor]=useState(''),[preserve,setPreserve]=useState(''),[product,setProduct]=useState('');
@@ -84,7 +99,7 @@ export function EcommerceMaterialPanel({projectId,cards,flush,runTask,onCreateNo
     {library.isLoading&&<p role="status" className="text-xs">{t('loadingMaterials')}</p>}
     {library.error&&<p role="alert" className="text-xs text-red-300">{library.error.message}<button type="button" className="min-h-10 px-2 underline" onClick={()=>void library.refetch()}>{t('reloadMaterials')}</button></p>}
     <div hidden={panel!=='library'}>
-    {library.data&&<EcommerceMaterialLibrary activeSku={currentProductSku} onSkuChange={setWorkflowSku} onLocateSku={onLocateSku?()=>onLocateSku(currentProductSku):undefined} projectId={projectId} materials={library.data.materials} onSaved={()=>library.refetch()} flush={flush} disabled={busy} onPlaceMaterial={onInsertAsset?item=>{onInsertAsset({id:item.id,publicUrl:item.url,filename:item.filename,width:null,height:null,createdAt:'',mediaType:'image'});setPanel(null);}:undefined} renderResults={sku=>onInsertAsset?<Suspense fallback={<p className="text-xs">{t('loadingMaterials')}</p>}><ProjectAssetPicker projectId={projectId} skuFilter={sku||undefined} excludeAssetIds={(library.data?.materials||[]).map(item=>item.id)} onSelectAsset={asset=>{onInsertAsset(asset);setPanel(null);}}/></Suspense>:null}/>}
+    {library.data&&<EcommerceMaterialLibrary activeSku={currentProductSku} onSkuChange={setWorkflowSku} onLocateSku={onLocateSku?()=>onLocateSku(currentProductSku):undefined} projectId={projectId} materials={library.data.materials} onSaved={()=>library.refetch()} flush={flush} disabled={busy} onDeleteAssets={deleteAssets} onPlaceMaterial={onInsertAsset?item=>{onInsertAsset({id:item.id,publicUrl:item.url,filename:item.filename,width:null,height:null,createdAt:'',mediaType:'image'});setPanel(null);}:undefined} renderResults={(sku,onDelete)=>onInsertAsset?<Suspense fallback={<p className="text-xs">{t('loadingMaterials')}</p>}><ProjectAssetPicker projectId={projectId} skuFilter={sku||undefined} excludeAssetIds={(library.data?.materials||[]).map(item=>item.id)} onDeleteAsset={asset=>onDelete(asset.id)} onSelectAsset={asset=>{onInsertAsset(asset);setPanel(null);}}/></Suspense>:null}/>}
     <button type="button" className="mt-3 min-h-10 w-full rounded border border-white/20 text-xs" onClick={()=>choosePanel('import')}>{t('importEntry')}</button>
     </div>
     <div hidden={panel!=='import'} className="space-y-3">

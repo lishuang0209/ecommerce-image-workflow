@@ -22,7 +22,9 @@ export function HistoryPanel({
   excludeAssetIds = [],
   heading,
   skuFilter,
+  onDeleteAsset,
 }: {
+  onDeleteAsset?: (asset: RecentAsset) => void;
   onSelectAsset: (
     asset: RecentAsset & { mediaType: 'image' | 'video' | 'audio' }
   ) => void;
@@ -80,12 +82,24 @@ export function HistoryPanel({
       {!loading && images.length > 0 ? (
         <AssetSection label={t('sidebar.recentImages')}>
           {images.map((img) => (
-            <AssetThumbnail
-              key={img.id}
-              src={img.publicUrl}
-              alt={t('sidebar.recentImageAlt')}
-              onClick={() => onSelectAsset({ ...img, mediaType: 'image' })}
-            />
+            <div key={img.id} className="relative">
+              <AssetThumbnail
+                src={img.publicUrl}
+                alt={t('sidebar.recentImageAlt')}
+                onClick={() => onSelectAsset({ ...img, mediaType: 'image' })}
+              />
+              {onDeleteAsset ? (
+                <button
+                  type="button"
+                  aria-label={ecommerceT('deleteAsset')}
+                  title={ecommerceT('deleteAsset')}
+                  className="absolute right-1 top-1 flex size-7 items-center justify-center rounded-full bg-black/75 text-xs text-white hover:bg-red-500"
+                  onClick={() => onDeleteAsset(img)}
+                >
+                  ×
+                </button>
+              ) : null}
+            </div>
           ))}
         </AssetSection>
       ) : null}
