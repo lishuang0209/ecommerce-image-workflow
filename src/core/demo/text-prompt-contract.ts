@@ -14,11 +14,13 @@ export function renderProductPrompt(draft: z.infer<typeof promptDraftSchema>, ta
   const identity = `商品身份与保真要求：${draft.product}。以实际连接的商品参考图为准，保持同一 SKU 的颜色、外形比例、Logo、已有文字与部件结构，不添加未经确认的功能、卖点、标签或文字。`;
   const image = task === 'main'
     ? '任务：白底电商主图。必须使用纯白色背景和柔和影棚光，仅展示完整商品及轻微接触阴影。不得使用户外、树林、木桌、室内场景或其他道具；通用创作要求中的场景风格不适用于本任务。'
-    : `任务：生活场景图。环境与光线：${draft.scene || '简洁自然的生活环境，商品为视觉主体'}。道具和环境不得遮挡或改变商品。`;
+    : `任务：生活场景图。背景必须重绘为：${draft.scene || '简洁自然的生活环境，商品为视觉主体'}。禁止纯白、纯色或棚拍背景，不得沿用参考图的背景；参考图只用于确定商品外观。道具和环境不得遮挡或改变商品。`;
   // Background instructions cannot leak through the shared composition field.
   if (task === 'main' && /户外|树林|森林|木桌|自然光|outdoor|forest|wooden|natural light/i.test(draft.composition)) throw new Error('Text model returned a scene composition for a white-background task. Please revise the requirements.');
   // A composition template is the single source of pose rules; the drafted composition would compete with it.
-  const composition = task === 'main' && options.template ? templateCompositionLine : `构图：${draft.composition}。`;
+  // The text model sometimes fills unknown fields with "未指定"; that gives the image model nothing to work with.
+  const drafted = /未指定|未知|不详|未提供/.test(draft.composition) ? (task === 'main' ? '单件商品居中，侧面展示，四周留白' : '商品居中偏下，约占画面宽度 50%，侧面展示') : draft.composition;
+  const composition = task === 'main' && options.template ? templateCompositionLine : `构图：${drafted}。`;
   return `${image}\n${identity}\n${composition}\n输出画幅：${ratio}。真实商业产品摄影，禁止额外文字和水印。`;
 }
 
