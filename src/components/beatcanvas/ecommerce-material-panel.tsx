@@ -1,3 +1,5 @@
+import {ImagePlus,FileText} from 'lucide-react';
+import {EcommerceSelect} from './ecommerce-select';
 import type {RecentAsset} from '@/core/workspace-lib/app/workspace-client-api';
 import {useQuery} from '@tanstack/react-query';
 import {EcommerceMaterialLibrary,type SavedEcommerceMaterial} from './ecommerce-material-library';
@@ -11,49 +13,54 @@ import {useTranslations} from '@/core/workspace-lib/shims/next-intl';
 
 const ProjectAssetPicker=lazy(()=>import('./beatcanvas-sidebar-panels').then(mod=>({default:mod.HistoryPanel})));
 type Material={id:string;file:File;preview:string;sku:string;role:'product'|'style';shot:''|'front'|'detail'|'scene';uploaded:boolean;bound:boolean;selected:boolean};
-export function EcommerceMaterialPanel({projectId,cards,flush,runTask,onCreateNode,onInsertAsset}:{onCreateNode?:(type:'image'|'text')=>void;onInsertAsset?:(asset:RecentAsset&{mediaType:'image'|'video'|'audio'})=>void;projectId:string;cards:Record<string,CanvasCard>;flush:()=>Promise<void>;runTask:(id:string)=>Promise<boolean>}){
+export function EcommerceMaterialPanel({projectId,cards,flush,runTask,onCreateNode,onInsertAsset,onSavedSnapshot,onLocateSku,onLocateCard}:{onLocateCard?:(id:string)=>void;onLocateSku?:(sku:string)=>void;onSavedSnapshot:(document:import('@/core/projects/project-snapshot').ProjectSnapshotDocument,version:number)=>void;onCreateNode?:(type:'image'|'text')=>void;onInsertAsset?:(asset:RecentAsset&{mediaType:'image'|'video'|'audio'})=>void;projectId:string;cards:Record<string,CanvasCard>;flush:()=>Promise<void>;runTask:(id:string)=>Promise<boolean>}){
  const t=useTranslations('AppShell.studio.ecommerce');
  const [panel,setPanel]=useState<'library'|'import'|'workflow'|'nodes'|null>(cards['ecommerce-start']?'import':null);
  const library=useQuery({queryKey:['ecommerce-materials',projectId],queryFn:()=>apiJsonGet<{materials:SavedEcommerceMaterial[]}>(`/api/demo/ecommerce-materials?projectId=${encodeURIComponent(projectId)}`),enabled:panel!==null,refetchOnWindowFocus:true});
  const [workflowSku,setWorkflowSku]=useState('');
+ const [importSkuTouched,setImportSkuTouched]=useState(false);
  const [profiles,setProfiles]=useState<Record<string,EcommerceProfile>>({});
  const [sku,setSku]=useState(''),[newSku,setNewSku]=useState(''),[color,setColor]=useState(''),[preserve,setPreserve]=useState('');
- const [role,setRole]=useState<'product'|'style'>('product'),[shot,setShot]=useState<''|'front'|'detail'|'scene'>('');
+ const role='product' as const,shot='' as const;
  const [files,setFiles]=useState<Material[]>([]),[busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState('');
  const previews=useRef(new Set<string>());
  useEffect(()=>()=>{for(const url of previews.current)URL.revokeObjectURL(url);},[]);
  const savedGroups=groupEcommerceMaterials(library.data?.materials||[]);
+ const currentProductSku=workflowSku||savedGroups.find(group=>Object.values(cards).some(card=>card.kind==='text'&&/^sku-[a-f0-9]{16}-facts$/.test(card.id)&&card.name.split(' · ').slice(0,-1).join(' · ')===group.sku))?.sku||savedGroups[0]?.sku||'';
+ useEffect(()=>{if(panel==='import'&&!importSkuTouched&&!sku&&!newSku&&currentProductSku)setSku(currentProductSku);},[panel,importSkuTouched,sku,newSku,currentProductSku]);
  const allProfiles={...profiles,...Object.fromEntries(savedGroups.map(group=>[group.sku,group]))};
  const active=allProfiles[sku];
  function update(id:string,patch:Partial<Material>){setFiles(current=>current.map(item=>item.id===id?{...item,...patch}:item));}
  function remove(id:string){const item=files.find(item=>item.id===id);if(item){URL.revokeObjectURL(item.preview);previews.current.delete(item.preview);}setFiles(current=>current.filter(item=>item.id!==id));}
- function createSku(){
-  const name=newSku.trim();if(!name)return;
-  if(allProfiles[name]){setError(t('skuExists'));return;}
-  setProfiles(current=>({...current,[name]:{sku:name,color:color.trim(),preserve:preserve.trim(),conflicting:false}}));
-  setSku(name);setNewSku('');setColor('');setPreserve('');setError('');
- }
  async function importFiles(){
   setBusy(true);setError('');setNotice('');
   try{
-   if(files.some(item=>!allProfiles[item.sku]))throw new Error(t('missingSku'));
-   if(files.some(item=>allProfiles[item.sku].conflicting))throw new Error(t('profileConflict'));
+   const target=sku||newSku.trim();
+   if(!target)throw new Error(t('selectSkuFirst'));
+   const frozenSku=files.find(item=>item.uploaded)?.sku;
+   if(frozenSku&&frozenSku!==target)throw new Error(t('missingSku'));
+   if(!sku&&frozenSku!==target&&savedGroups.some(group=>group.sku===target))throw new Error(t('skuExists'));
+   const importProfiles=sku?allProfiles:{...allProfiles,[target]:{sku:target,color:color.trim(),preserve:preserve.trim(),conflicting:false}};
+   if(!sku)setProfiles(current=>({...current,[target]:importProfiles[target]}));
+   for(const item of files){if(!item.uploaded)item.sku=target;}
+   if(files.some(item=>!importProfiles[item.sku]))throw new Error(t('missingSku'));
+   if(files.some(item=>importProfiles[item.sku].conflicting))throw new Error(t('profileConflict'));
    await flush();
+   let reused=0;
    for(const item of files){
-    const profile=allProfiles[item.sku];
-    if(!item.uploaded){await uploadLocalProjectAsset({projectId,file:item.file,metadata:{ecommerce:{sku:item.sku,role:item.role,shot:item.shot||undefined,color:profile.color,preserve:profile.preserve}}});item.uploaded=true;update(item.id,{uploaded:true});}
+    const profile=importProfiles[item.sku];
+    if(!item.uploaded){const saved=await uploadLocalProjectAsset({projectId,file:item.file,metadata:{ecommerce:{sku:item.sku,role:item.role,shot:item.shot||undefined,color:profile.color,preserve:profile.preserve}}});if(saved.reused)reused++;item.uploaded=true;update(item.id,{uploaded:true});}
    }
    let allHaveProduct=true;
    for(const name of new Set(files.filter(item=>!item.bound).map(item=>item.sku))){
-    const result=await apiJsonPost<{hasProduct:boolean}>('/api/demo/ecommerce-materials',{projectId,sku:name});allHaveProduct=allHaveProduct&&result.hasProduct;
+    const result=await apiJsonPost<{hasProduct:boolean;document:import('@/core/projects/project-snapshot').ProjectSnapshotDocument;version:number}>('/api/demo/ecommerce-materials',{projectId,sku:name});onSavedSnapshot(result.document,result.version);allHaveProduct=allHaveProduct&&result.hasProduct;
     for(const item of files.filter(item=>item.sku===name)){item.bound=true;update(item.id,{bound:true});}
    }
    for(const item of files){URL.revokeObjectURL(item.preview);previews.current.delete(item.preview);}
-   setWorkflowSku(files[files.length-1]?.sku||sku);setFiles([]);await library.refetch();setNotice(allHaveProduct?t('saved'):t('needsProduct'));
+   setWorkflowSku(target);setSku(target);setNewSku('');setColor('');setPreserve('');setFiles([]);await library.refetch();setNotice((allHaveProduct?t('saved'):t('needsProduct'))+(reused?' '+t('duplicateImportsReused')+' '+reused:''));
   }catch(cause){setError(cause instanceof Error?cause.message:t('failed'));}finally{setBusy(false);}
  }
  function addFiles(incoming:File[]){
-  if(!active){setError(t('selectSkuFirst'));return;}
   const valid=incoming.filter(file=>file.size>0&&file.size<=10*1024*1024&&['image/png','image/jpeg','image/webp'].includes(file.type));
   setError(valid.length!==incoming.length?t('fileLimit'):'');
   const next=[...files];
@@ -62,54 +69,58 @@ export function EcommerceMaterialPanel({projectId,cards,flush,runTask,onCreateNo
  }
  function chooseFiles(event:ChangeEvent<HTMLInputElement>){addFiles(Array.from(event.target.files||[]));event.target.value='';}
  const input='min-h-10 w-full rounded border border-white/15 bg-[var(--beat-surface)] px-2 text-xs';
+ const importTarget=sku||newSku.trim();
+ const partiallySaved=files.some(item=>item.uploaded);
+ function choosePanel(value:'library'|'import'|'workflow'|'nodes'){if(value==='import'&&!files.length&&!newSku){setImportSkuTouched(false);setSku(currentProductSku);}setPanel(current=>current===value?null:value);}
  const skuOptions=Object.values(allProfiles).map(profile=><option key={profile.sku} value={profile.sku}>{profile.sku}</option>);
  return <div className="pointer-events-auto absolute left-4 top-4 z-40 w-[440px] max-w-[calc(100%_-_32px)] text-[var(--beat-text-1)]">
   <nav aria-label={t('canvasTools')} className="inline-flex max-w-full flex-wrap items-center gap-1 rounded-xl border border-white/15 bg-[var(--beat-surface)] p-1 shadow-lg">
-   {(['library','import','workflow','nodes']as const).map(value=><button key={value} type="button" aria-expanded={panel===value} aria-controls="ecommerce-tool-panel" className={'min-h-10 rounded-lg px-3 text-xs transition-colors '+(panel===value?'bg-white/10 text-white':'text-[var(--beat-text-2)] hover:bg-white/5')} onClick={()=>setPanel(current=>current===value?null:value)}>{t(value==='library'?'libraryEntry':value==='import'?'importEntry':value==='nodes'?'addNode':'workflowTab')}</button>)}
+   {(['library','import','workflow','nodes']as const).map(value=><button key={value} type="button" aria-expanded={panel===value} aria-controls="ecommerce-tool-panel" className={'min-h-10 rounded-lg px-3 text-xs transition-colors '+(panel===value?'bg-white/10 text-white':'text-[var(--beat-text-2)] hover:bg-white/5')} onClick={()=>choosePanel(value)}>{t(value==='library'?'libraryEntry':value==='import'?'importEntry':value==='nodes'?'addNode':'workflowTab')}</button>)}
 
   </nav>
   {panel&&<section id="ecommerce-tool-panel" aria-label={t(panel==='library'?'libraryEntry':panel==='import'?'importEntry':panel==='nodes'?'addNode':'workflowTab')} className="mt-2 max-h-[70vh] space-y-3 overflow-auto rounded-xl border border-white/15 bg-[var(--beat-surface)] p-4 shadow-xl">
-   <header className="flex items-center justify-between border-b border-white/10 pb-2"><h2 className="text-sm">{t(panel==='library'?'libraryEntry':panel==='import'?'importEntry':panel==='nodes'?'addNode':'workflowTab')}</h2><button type="button" aria-label={t('closeToolPanel')} className="min-h-10 px-2 text-xs text-[var(--beat-text-3)] hover:text-white" onClick={()=>setPanel(null)}>{t('closeToolPanel')} ×</button></header>
+   <header className="flex items-center justify-between pb-2"><h2 className="text-sm">{t(panel==='library'?'libraryEntry':panel==='import'?'importEntry':panel==='nodes'?'addNode':'workflowTab')}</h2><button type="button" aria-label={t('closeToolPanel')} className="min-h-10 px-2 text-xs text-[var(--beat-text-3)] hover:text-white" onClick={()=>setPanel(null)}>{t('closeToolPanel')} ×</button></header>
    <div hidden={panel==='workflow'||panel==='nodes'}>
     {library.isLoading&&<p role="status" className="text-xs">{t('loadingMaterials')}</p>}
     {library.error&&<p role="alert" className="text-xs text-red-300">{library.error.message}<button type="button" className="min-h-10 px-2 underline" onClick={()=>void library.refetch()}>{t('reloadMaterials')}</button></p>}
     <div hidden={panel!=='library'}>
-    {library.data&&<EcommerceMaterialLibrary projectId={projectId} materials={library.data.materials} onSaved={()=>library.refetch()} flush={flush} disabled={busy}/>}
-    {panel==='library'&&library.data&&onInsertAsset&&<Suspense fallback={<p className="text-xs">{t('loadingMaterials')}</p>}><ProjectAssetPicker projectId={projectId} excludeAssetIds={(library.data?.materials||[]).map(item=>item.id)} heading={t('otherProjectAssets')} onSelectAsset={asset=>{onInsertAsset(asset);setPanel(null);}}/></Suspense>}
-    <button type="button" className="mt-3 min-h-10 w-full rounded border border-white/20 text-xs" onClick={()=>setPanel('import')}>{t('importEntry')}</button>
+    {library.data&&<EcommerceMaterialLibrary activeSku={currentProductSku} onSkuChange={setWorkflowSku} onLocateSku={onLocateSku?()=>onLocateSku(currentProductSku):undefined} projectId={projectId} materials={library.data.materials} onSaved={()=>library.refetch()} flush={flush} disabled={busy} onPlaceMaterial={onInsertAsset?item=>{onInsertAsset({id:item.id,publicUrl:item.url,filename:item.filename,width:null,height:null,createdAt:'',mediaType:'image'});setPanel(null);}:undefined} renderResults={sku=>onInsertAsset?<Suspense fallback={<p className="text-xs">{t('loadingMaterials')}</p>}><ProjectAssetPicker projectId={projectId} skuFilter={sku||undefined} excludeAssetIds={(library.data?.materials||[]).map(item=>item.id)} onSelectAsset={asset=>{onInsertAsset(asset);setPanel(null);}}/></Suspense>:null}/>}
+    <button type="button" className="mt-3 min-h-10 w-full rounded border border-white/20 text-xs" onClick={()=>choosePanel('import')}>{t('importEntry')}</button>
     </div>
     <div hidden={panel!=='import'} className="space-y-3">
      <fieldset disabled={busy} className="space-y-3">
-      <h3 className="text-sm">{t('productStep')}</h3><p className="text-xs leading-6 text-[var(--beat-text-3)]">{t('profileScope')}</p>
-      <label className="block text-xs">{t('chooseSku')}<select className={input} value={sku} onChange={event=>setSku(event.target.value)}><option value="">{t('newSku')}</option>{skuOptions}</select></label>
-      {!sku?<div className="space-y-2 rounded border border-white/15 p-3">
-       <label className="block text-xs">{t('sku')}<input className={input} maxLength={100} value={newSku} onChange={event=>setNewSku(event.target.value)} placeholder={t('skuPlaceholder')}/></label><p className="text-xs text-[var(--beat-text-3)]">{t('skuHelp')}</p>
-       <label className="block text-xs">{t('color')}<input className={input} maxLength={100} value={color} onChange={event=>setColor(event.target.value)} placeholder={t('colorExample')}/></label>
-       <label className="block text-xs">{t('preserve')}<textarea className={input+' py-2'} maxLength={1000} value={preserve} placeholder={t('preserveHint')} onChange={event=>setPreserve(event.target.value)}/></label>
-       <button type="button" disabled={!newSku.trim()} className="min-h-10 rounded border border-white/20 px-3 text-xs disabled:opacity-40" onClick={createSku}>{t('useSku')}</button><p className="text-xs text-[var(--beat-text-3)]">{t('profileWillSave')}</p>
-      </div>:active&&<div className="space-y-1 rounded border border-white/15 p-3 text-xs"><p>{t('color')}：{active.color||t('notSet')}</p><p className="whitespace-pre-wrap">{t('preserve')}：{active.preserve||t('notSet')}</p>{profiles[sku]&&!savedGroups.some(group=>group.sku===sku)&&<button type="button" className="min-h-10 underline" onClick={()=>{setNewSku(sku);setColor(active.color);setPreserve(active.preserve);setSku('');setProfiles(current=>{const next={...current};delete next[sku];return next;});}}>{t('editDraftProfile')}</button>}</div>}
-      <p className="text-xs leading-6 text-[var(--beat-text-3)]">{t('defaultPhotoHint')}</p>
-      <details className="space-y-2 rounded border border-white/15 p-3"><summary className="cursor-pointer text-xs">{t('optionalPhotoSettings')}</summary>
-      <label className="block text-xs">{t('role')}<select className={input} value={role} onChange={event=>setRole(event.target.value as typeof role)}>{(['product','style']as const).map(value=><option key={value} value={value}>{t(value)}</option>)}</select></label>
-      <label className="block text-xs">{t('shot')}<select className={input} value={shot} onChange={event=>setShot(event.target.value as typeof shot)}><option value="">{t('shotUnspecified')}</option>{(['front','detail','scene']as const).map(value=><option key={value} value={value}>{t('shot_'+value)}</option>)}</select></label>
-      <button type="button" className="min-h-10 text-xs underline disabled:opacity-40" disabled={!active||!files.some(item=>item.selected&&!item.uploaded)} onClick={()=>setFiles(current=>current.map(item=>item.selected&&!item.uploaded?{...item,sku,role,shot}:item))}>{t('applyPhotoFields')}</button>
-      </details>
-      <div className="rounded-lg border border-dashed border-white/25 p-3" onDragOver={event=>{event.preventDefault();event.stopPropagation();}} onDrop={event=>{event.preventDefault();event.stopPropagation();if(!busy)addFiles(Array.from(event.dataTransfer.files));}}><label className="block text-xs">{t('appendFiles')}<input disabled={!active} className="mt-2 block w-full text-xs" type="file" accept="image/png,image/jpeg,image/webp" multiple onChange={chooseFiles}/></label><p className="mt-2 text-xs text-[var(--beat-text-3)]">{active?t('dropHint'):t('selectSkuFirst')}</p></div>
-      {files.length>0&&<div className="space-y-2"><p className="text-xs">{t('queue')} · {files.length}</p>{files.map(item=><div key={item.id} className="space-y-2 rounded-lg border border-white/15 p-2">
-       <div className="flex items-center gap-2"><input type="checkbox" aria-label={t('selectImage')+' '+item.file.name} checked={item.selected} disabled={item.uploaded} onChange={event=>update(item.id,{selected:event.target.checked})}/><img src={item.preview} alt={item.file.name} className="h-14 w-14 rounded object-contain"/><span className="min-w-0 flex-1 break-all text-xs">{item.file.name}{item.uploaded?' · '+t('uploadedLocal'):''}</span><button type="button" className="min-h-10 px-2 text-xs underline" onClick={()=>remove(item.id)}>{t('remove')}</button></div>
-       <details className="space-y-2"><summary className="cursor-pointer text-xs text-[var(--beat-text-3)]">{item.sku} · {t(item.role)} · {t('editPhotoSettings')}</summary>
-       <label className="block text-xs">{t('chooseSku')}<select className={input} disabled={item.uploaded} value={item.sku} onChange={event=>update(item.id,{sku:event.target.value})}>{skuOptions}</select></label>
-       <label className="block text-xs">{t('role')}<select className={input} disabled={item.uploaded} value={item.role} onChange={event=>update(item.id,{role:event.target.value as typeof role})}>{(['product','style']as const).map(value=><option key={value} value={value}>{t(value)}</option>)}</select></label>
-       <label className="block text-xs">{t('shot')}<select className={input} disabled={item.uploaded} value={item.shot} onChange={event=>update(item.id,{shot:event.target.value as typeof shot})}><option value="">{t('shotUnspecified')}</option>{(['front','detail','scene']as const).map(value=><option key={value} value={value}>{t('shot_'+value)}</option>)}</select></label>
-       </details>
+      <div className="rounded-xl border border-dashed border-white/25 bg-white/[0.03] p-4 text-center" onDragOver={event=>{event.preventDefault();event.stopPropagation();}} onDrop={event=>{event.preventDefault();event.stopPropagation();if(!busy)addFiles(Array.from(event.dataTransfer.files));}}>
+       <label className="flex min-h-24 cursor-pointer flex-col items-center justify-center gap-2 rounded-lg focus-within:ring-2 focus-within:ring-orange-400"><span className="text-2xl text-[var(--beat-text-3)]">＋</span><span className="text-sm">{t(files.length?'addMoreImages':'chooseImagesFirst')}</span><input className="sr-only" type="file" accept="image/png,image/jpeg,image/webp" multiple onChange={chooseFiles}/></label>
+       <p className="mt-2 text-[11px] text-[var(--beat-text-3)]">{t('uploadLimitsShort')}</p>
+      </div>
+      {files.length>0&&<div className="grid grid-cols-2 gap-3">{files.map(item=><div key={item.id} className="relative min-w-0 overflow-hidden rounded-xl border border-white/10 bg-white/[0.03]">
+       <img src={item.preview} alt={item.file.name} className="aspect-square w-full object-contain"/>
+       <button type="button" aria-label={t('remove')+' '+item.file.name} className="absolute right-2 top-2 flex size-8 items-center justify-center rounded-full bg-black/70 text-white" onClick={()=>remove(item.id)}>×</button>
+       <p title={item.file.name} className="truncate px-2 py-2 text-xs">{item.file.name}</p>
+       {item.uploaded?<p className="px-2 pb-2 text-[11px] text-green-300">{t('uploadedLocal')}</p>:<details className="px-2 pb-2 text-xs text-[var(--beat-text-3)]"><summary className="min-h-9 cursor-pointer py-2">{t(item.role==='style'?'styleBadge':'importedBadge')} · {t('imageSettingsShort')}</summary>
+        <label className="block">{t('role')}<EcommerceSelect className={input} value={item.role} onChange={event=>update(item.id,{role:event.target.value as Material['role']})}>{(['product','style']as const).map(value=><option key={value} value={value}>{t(value==='product'?'importedBadge':'styleBadge')}</option>)}</EcommerceSelect></label>
+        <label className="mt-2 block">{t('shot')}<EcommerceSelect className={input} value={item.shot} onChange={event=>update(item.id,{shot:event.target.value as Material['shot']})}><option value="">{t('shotUnspecified')}</option>{(['front','detail','scene']as const).map(value=><option key={value} value={value}>{t('shot_'+value)}</option>)}</EcommerceSelect></label>
+       </details>}
       </div>)}</div>}
+      <fieldset disabled={partiallySaved} className="space-y-3">
+       <label className="block text-xs">{t('chooseSku')}<EcommerceSelect className={input} value={sku} onChange={event=>{setImportSkuTouched(true);setSku(event.target.value);setError('');}}><option value="">{t('newSku')}</option>{skuOptions}</EcommerceSelect></label>
+       {!sku?<div className="space-y-3"><label className="block text-xs">{t('shortSkuName')}<input className={input} maxLength={100} value={newSku} onChange={event=>setNewSku(event.target.value)} placeholder={t('skuPlaceholder')}/></label>
+        <details className="rounded-lg bg-white/[0.02] p-3"><summary className="cursor-pointer text-xs text-[var(--beat-text-3)]">{t('optionalProductInfo')}</summary><div className="mt-3 space-y-3"><label className="block text-xs">{t('color')}<input className={input} maxLength={100} value={color} onChange={event=>setColor(event.target.value)} placeholder={t('colorExample')}/></label><label className="block text-xs">{t('preserve')}<textarea className={input+' py-2'} maxLength={1000} value={preserve} placeholder={t('preserveHint')} onChange={event=>setPreserve(event.target.value)}/></label></div></details>
+       </div>:active?.conflicting?<p className="text-xs text-amber-300">{t('profileConflictShort')}</p>:<p className="text-[11px] text-[var(--beat-text-3)]">{t('existingInfoReused')}</p>}
+      </fieldset>
      </fieldset>
-     <button type="button" disabled={busy||!files.length} onClick={()=>void importFiles()} className="min-h-10 w-full rounded bg-[var(--beat-accent)] px-3 text-xs font-medium text-black disabled:opacity-40">{t('import')} · {files.length}</button>
+     <div className="sticky -bottom-4 z-10 space-y-2 bg-[var(--beat-surface)] py-3">
+      <p className="truncate text-xs text-[var(--beat-text-3)]">{files.length} {t('photoCount')} · {importTarget||t('chooseSkuBeforeImport')}</p>
+      <button type="button" disabled={busy||!files.length||!importTarget||!!active?.conflicting} onClick={()=>void importFiles()} className="min-h-11 w-full rounded-lg bg-[var(--beat-accent)] px-3 text-sm font-medium text-black disabled:opacity-40">{busy?t('importingImages'):t('confirmImageImport')+' · '+files.length}</button>
+      {notice&&<button type="button" className="min-h-10 w-full text-xs" onClick={()=>setPanel('library')}>{t('viewImportedImages')} →</button>}
+     </div>
+
     </div>
     {notice&&<p role="status" className="text-xs leading-6 text-green-300">{notice}</p>}{error&&<p role="alert" className="text-xs leading-6 text-red-300">{error}</p>}
    </div>
-   {panel==='nodes'&&<div className="space-y-2"><p className="text-xs leading-6 text-[var(--beat-text-3)]">{t('addNodeHint')}</p>{(['image','text']as const).map(type=><button key={type} type="button" className="min-h-10 w-full rounded border border-white/20 text-xs" onClick={()=>{onCreateNode?.(type);setPanel(null);}}>{t(type==='image'?'addImageNode':'addTextNode')}</button>)}</div>}
-   <div hidden={panel!=='workflow'}><EcommerceWorkflowPanel activeSku={workflowSku} onSkuChange={setWorkflowSku} projectId={projectId} cards={cards} flush={flush} runTask={runTask}/></div>
+   {panel==='nodes'&&<div className="grid grid-cols-2 gap-3">{(['image','text']as const).map(type=>{const Icon=type==='image'?ImagePlus:FileText;const label=t(type==='image'?'addImageNode':'addTextNode');return <button key={type} type="button" title={label} aria-label={label} disabled={!onCreateNode} className="group flex min-h-28 flex-col items-center justify-center gap-3 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-4 text-[var(--beat-text-2)] transition-colors duration-150 hover:border-orange-400/40 hover:bg-orange-400/[0.06] hover:text-white active:bg-orange-400/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--beat-surface)] disabled:cursor-not-allowed disabled:opacity-40" onClick={()=>{onCreateNode?.(type);setPanel(null);}}><span className="flex size-12 items-center justify-center rounded-xl bg-white/5 transition-colors group-hover:bg-orange-400/10 group-hover:text-orange-400"><Icon aria-hidden="true" className="size-6" strokeWidth={1.6}/></span><span className="text-xs font-medium">{label}</span></button>;})}</div>}
+
+   <div hidden={panel!=='workflow'}><EcommerceWorkflowPanel onLocatePrompt={onLocateCard} onSavedSnapshot={onSavedSnapshot} materialSkus={savedGroups.map(group=>group.sku)} activeSku={currentProductSku} onSkuChange={setWorkflowSku} projectId={projectId} cards={cards} flush={flush} runTask={runTask}/></div>
   </section>}
  </div>;
 }

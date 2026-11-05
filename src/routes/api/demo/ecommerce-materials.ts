@@ -21,7 +21,7 @@ async function POST({request}:{request:Request}) {
   if(!saved)throw new Error('Project is unavailable.');
   return Response.json({document:saved.snapshot,version:saved.snapshotVersion});
  }
- const input=z.object({projectId:z.string().uuid(),sku:ecommerceTagSchema.shape.sku,action:z.enum(['import','workflow','adopt']).optional(),assetId:z.string().uuid().optional(),masterSku:ecommerceTagSchema.shape.sku.optional()}).strict().parse(body);return Response.json(await bindEcommerceMaterials(input));}
+ const input=z.object({projectId:z.string().uuid(),sku:ecommerceTagSchema.shape.sku,action:z.enum(['import','workflow','adopt','master','scene']).optional(),assetId:z.string().uuid().optional(),masterSku:ecommerceTagSchema.shape.sku.optional(),masterAssetId:z.string().uuid().optional(),clearMaster:z.boolean().optional(),sceneDescription:z.string().trim().min(1).max(800).optional(),taskId:z.string().max(128).optional(),copyPromptFrom:z.string().max(128).optional()}).strict().parse(body);const result=await bindEcommerceMaterials(input);const saved=await loadProjectWithLatestSnapshot({projectId:input.projectId});if(!saved)throw new Error('Project is unavailable.');return Response.json({...result,document:saved.snapshot,version:saved.snapshotVersion});}
  catch(error){return Response.json({error:error instanceof Error?error.message:'Unable to bind SKU materials.'},{status:400});}
 }
 async function GET({request}:{request:Request}){

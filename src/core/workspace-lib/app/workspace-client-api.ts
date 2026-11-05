@@ -13,6 +13,7 @@ export type WorkspaceProjectCardItem = {
 };
 
 export type RecentAsset = {
+  sha256?:string|null;
   id: string;
   publicUrl: string;
   filename?: string | null;

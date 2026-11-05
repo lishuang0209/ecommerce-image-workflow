@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useTranslations } from '@/core/workspace-lib/shims/next-intl';
 import type { CanvasTextRole } from '@/core/beatcanvas/canvas-types';
 import { MAX_TEXT_NODE_CHARS } from '@/core/beatcanvas/text-nodes';
+import { ecommercePromptPattern } from '@/core/demo/ecommerce-contract';
 import { useCanvasFrontLayer } from '../beatcanvas-front-layer-context';
 import type { BeatCanvasFlowNode } from '../react-flow/beatcanvas-react-flow-types';
 
@@ -107,12 +108,15 @@ export function TextCardNode({
           }
           className="nodrag nopan nowheel min-h-0 flex-1 resize-none bg-transparent p-4 text-sm leading-relaxed text-[var(--beat-text-1)] outline-none placeholder:text-[var(--beat-text-3)] focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-[var(--beat-graph)]"
         />
-        {id !== 'product-information' && id !== 'ecommerce-start' && !id.endsWith('-facts') && <div className="nodrag nopan nowheel shrink-0 space-y-2 border-t border-white/10 px-3 py-2 text-xs">
+        {/* Legacy "-brief" scene notes are plain input; only the prompt node itself offers paid AI drafting. */}
+        {id !== 'product-information' && id !== 'ecommerce-start' && !id.endsWith('-facts') && !id.endsWith('-brief') && <div className="nodrag nopan nowheel shrink-0 space-y-2 border-t border-white/10 px-3 py-2 text-xs">
           <div className="flex items-center gap-2">
-            <select aria-label={t('promptTask')} value={task} disabled={generating} onChange={event => setTask(event.target.value as 'main' | 'scene')} className={`${fieldClass} min-h-8 min-w-0 flex-1`}>
-              <option value="main" className="bg-[var(--beat-surface)]">{t('mainPrompt')}</option>
-              <option value="scene" className="bg-[var(--beat-surface)]">{t('scenePrompt')}</option>
-            </select>
+            {ecommercePromptPattern.test(id)
+              ? <span className="min-w-0 flex-1 truncate text-[var(--beat-text-3)]">{t(task === 'main' ? 'mainPrompt' : 'scenePrompt')}</span>
+              : <select aria-label={t('promptTask')} value={task} disabled={generating} onChange={event => setTask(event.target.value as 'main' | 'scene')} className={`${fieldClass} min-h-8 min-w-0 flex-1`}>
+                <option value="main" className="bg-[var(--beat-surface)]">{t('mainPrompt')}</option>
+                <option value="scene" className="bg-[var(--beat-surface)]">{t('scenePrompt')}</option>
+              </select>}
             <button type="button" className="min-h-8 rounded bg-[var(--beat-accent)] px-2 text-black disabled:opacity-40" disabled={generating || !onGenerateTextPrompt || !card.textContent.trim()} onClick={() => void generatePrompt()}>{generating ? t('textGenerating') : t('generatePrompt')}</button>
           </div>
           {error && <p role="alert" className="text-red-300">{error}</p>}

@@ -7,15 +7,32 @@ import { persistBeatDesignCommand } from '@/core/commands/persist';
 import type { CanvasOperation } from '@/core/commands/canvas-commands';
 import type { CanvasCard, CanvasGenerationCard } from '@/core/beatcanvas/canvas-types';
 import { buildTextCard } from '@/core/beatcanvas/text-nodes';
-import { ecommerceTag, pendingEcommercePrompt, preservationPrompt } from './ecommerce-contract';
+import { ecommerceTag, pendingEcommercePrompt, ecommerceTaskPattern, preservationPrompt } from './ecommerce-contract';
 import { getProjectAssetById } from '@/core/workspace-lib/assets/user-assets';
 
 export const skuNodePrefix = (sku: string) => `sku-${createHash('sha256').update(sku).digest('hex').slice(0,16)}`;
-export async function bindEcommerceMaterials({projectId,sku,action='import',assetId,masterSku}: {
- projectId:string;sku:string;action?:'import'|'workflow'|'adopt';assetId?:string;masterSku?:string;
-}) {
+/** Copies another SKU's detailed scene prompt, swapping its colour word for this SKU's colour; null when it cannot be done safely. */
+function copiedScenePrompt(cards:Map<string,CanvasCard>,assets:{metadata:unknown}[],sourceId?:string){
+ if(!sourceId||!/^sku-[a-f0-9]{16}-scene-[A-Za-z0-9]+-prompt$/.test(sourceId))return null;
+ const source=cards.get(sourceId),text=source?.kind==='text'?source.textContent?.trim():'';
+ const facts=cards.get(sourceId.replace(/-scene-.*$/,'-facts')),from=facts?.kind==='text'?/确认颜色：([^；\n]+)/.exec(facts.textContent||'')?.[1]?.trim():'';
+ const to=assets.map(asset=>ecommerceTag(asset.metadata)?.color?.trim()).find(Boolean);
+ if(!text||text===pendingEcommercePrompt||!from||!to||!text.includes(from))return null;
+ return text.split(from).join(to);
+}
+export async function bindEcommerceMaterials({projectId,sku,action='import',assetId,masterSku,masterAssetId,clearMaster,sceneDescription,taskId,copyPromptFrom}: {
+ projectId:string;sku:string;action?:'import'|'workflow'|'adopt'|'master'|'scene';assetId?:string;masterSku?:string;masterAssetId?:string;clearMaster?:boolean;sceneDescription?:string;taskId?:string;copyPromptFrom?:string;
+}):Promise<{sku:string;assets:number;hasProduct:boolean;taskIds:string[]}> {
  const state=await loadProjectWithLatestSnapshot({projectId});
  if(!state)throw new Error('Project is unavailable.');
+ if(action==='scene'&&!state.snapshot.cards.some(card=>card.id===skuNodePrefix(sku)+'-main-image')){
+  await bindEcommerceMaterials({projectId,sku,action:'workflow'});
+  return bindEcommerceMaterials({projectId,sku,action,sceneDescription,taskId,copyPromptFrom});
+ }
+ if(action==='workflow'&&!state.snapshot.cards.some(card=>card.id===skuNodePrefix(sku)+'-facts')){
+  await bindEcommerceMaterials({projectId,sku,action:'import'});
+  return bindEcommerceMaterials({projectId,sku,action,assetId,masterSku,masterAssetId,clearMaster});
+ }
  const db=await getDb();
  type AssetRow={id:string;filename:string|null;publicUrl:string;metadata:unknown;type:string};
  const rows:AssetRow[]=await db.select({id:userAsset.id,filename:userAsset.filename,publicUrl:userAsset.publicUrl,metadata:userAsset.metadata,type:userAsset.type}).from(userAsset).innerJoin(projectAssetMembership,eq(projectAssetMembership.assetId,userAsset.id)).where(and(eq(projectAssetMembership.projectId,projectId),eq(userAsset.type,'image')));
@@ -35,6 +52,36 @@ export async function bindEcommerceMaterials({projectId,sku,action='import',asse
    if(!cards.has(id))operations.push({type:'upsert_card',card:{...buildTextCard({id,name:`${sku} · ${tag.shot||tag.role} · ${asset.filename||asset.id}`}),kind:'asset',type:'image',assetId:asset.id,url:asset.publicUrl,status:'succeeded'},frame:{x:-740-index%2*330,y:y+Math.floor(index/2)*290,w:300,h:260}});
   }
   if(!cards.has(factsId))operations.push({type:'upsert_text',cardId:factsId,name:`${sku} · 商品信息`,textContent:`${preservationPrompt(assets.map(asset=>ecommerceTag(asset.metadata)))}\n商品名称、型号与容量：请核对后填写，未确认的规格不应补写。\n素材标签会在生成时自动读取；请在此补充其他商品事实。`,frame:{x:-40,y,w:400,h:400}});
+ }else if(action==='scene'){
+  const description=sceneDescription?.trim();
+  if(!description||description.length>800)throw new Error('Enter a scene description of 1–800 characters.');
+  const id=taskId||`${prefix}-scene-${randomUUID().replaceAll('-','')}-image`;
+  const match=ecommerceTaskPattern.exec(id);
+  if(!match||match[1]!==prefix||match[2]==='main')throw new Error('Scene task must belong to this SKU.');
+  const existing=cards.get(id);
+  if(existing&&existing.kind!=='generation')throw new Error('Invalid scene node.');
+  const promptId=id.replace(/-image$/,'-prompt'),briefId=id.replace(/-image$/,'-brief');
+  const label=description.slice(0,40);
+  const sceneY=state.snapshot.frames[id]?.y??Math.max(y,...state.snapshot.cards.filter(card=>card.id.startsWith(prefix+'-')&&card.kind==='generation').map(card=>state.snapshot.frames[card.id]?.y??y))+510;
+  // New scenes use ONE text node: the user's own description is the editable prompt (AI expansion is optional).
+  // Scenes that already have a separate brief node keep that two-node structure and its review reset.
+  const legacyBrief=cards.has(briefId);
+  if(legacyBrief)operations.push({type:'upsert_text',cardId:briefId,name:`${sku} · 场景要求`,textContent:description,frame:state.snapshot.frames[briefId]??{x:-40,y:sceneY,w:400,h:240}});
+  const prompt={...buildTextCard({id:promptId,name:`${sku} · ${label}提示词`,textContent:legacyBrief?pendingEcommercePrompt:copiedScenePrompt(cards,assets,copyPromptFrom)||description}),referenceCardIds:legacyBrief?[factsId,briefId]:[factsId]};
+  operations.push({type:'upsert_card',card:prompt,frame:state.snapshot.frames[promptId]??{x:420,y:sceneY,w:400,h:400}});
+  const adoptedId=`${prefix}-adopted-main`;
+  const generation:CanvasGenerationCard={...(existing?.kind==='generation'?existing:buildTextCard({id,name:''})),id,kind:'generation',type:'image',name:`${sku} · ${label}`,modelId:'qwen-image-2.1',aspectRatio:'4:5',outputQuality:'1k',prompt:'',referenceCardIds:[promptId,...(cards.has(adoptedId)?[adoptedId]:[]),...assets.filter(asset=>ecommerceTag(asset.metadata)?.role==='style').map(asset=>`sku-asset-${asset.id}`)]};
+  // Scenes are 4:5, so the node frame is 4:5 too (400×500) and the result is not cropped to a square.
+  operations.push({type:'upsert_card',card:generation,...(!existing?{frame:{x:900,y:sceneY,w:400,h:500}}:{})});
+ }else if(action==='master'){
+  const adopted=cards.get(`${prefix}-adopted-main`);
+  if(!assetId||adopted?.kind!=='asset'||adopted.assetId!==assetId)throw new Error('Adopt this main image before marking it as a composition reference.');
+  const asset=await getProjectAssetById({projectId,assetId});
+  const metadata=asset?.metadata as {sourceCardId?:string;ecommerceOutput?:{task?:string}}|null;
+  if(!asset||asset.source!=='provider'||ecommerceTag(asset.metadata)?.sku!==sku||metadata?.sourceCardId!==`${prefix}-main-image`||metadata.ecommerceOutput?.task!=='main')throw new Error('Invalid composition reference.');
+  for(const id of [`${prefix}-composition-master`,`${prefix}-composition-master-${assetId}`]){
+   operations.push({type:'upsert_card',card:{...adopted,id,name:`${sku} · 同款构图参考`,referenceCardIds:[`${prefix}-main-image`]},frame:state.snapshot.frames[id]??{x:1370,y,w:340,h:360}});
+  }
  }else if(action==='adopt'){
   if(!assetId)throw new Error('Choose a successful listing image.');
   const asset=await getProjectAssetById({projectId,assetId});
@@ -51,16 +98,24 @@ export async function bindEcommerceMaterials({projectId,sku,action='import',asse
   if(assets.length>10)throw new Error('Use at most ten reference photos for this MVP workflow.');
   if(!cards.has(factsId))throw new Error('Import materials into the canvas first.');
   let masterId:string|undefined;
+  if(clearMaster){
+   if(masterSku)throw new Error('Choose independent composition or a master, not both.');
+   const id=`${prefix}-master-reference`;
+   if(cards.has(id))operations.push({type:'remove_card',cardId:id});
+   const main=cards.get(`${prefix}-main-image`);
+   if(main?.kind==='generation')operations.push({type:'set_references',cardId:main.id,referenceCardIds:main.referenceCardIds.filter(ref=>ref!==id)});
+  }
   if(masterSku){
    if(masterSku===sku)throw new Error('Select a different SKU as the master.');
-   const master=cards.get(`${skuNodePrefix(masterSku)}-adopted-main`);
-   if(master?.kind!=='asset'||!master.assetId)throw new Error('Adopt the master SKU listing image first.');
+   const master=cards.get(`${skuNodePrefix(masterSku)}-composition-master`);
+   if(master?.kind!=='asset'||!master.assetId)throw new Error('Mark an adopted main image as a composition reference first.');
+   if(masterAssetId&&master.assetId!==masterAssetId)throw new Error('Composition reference changed. Reload and select it again.');
    masterId=`${prefix}-master-reference`;
-   operations.push({type:'upsert_card',card:{...master,id:masterId,name:`${sku} · 构图母版（${masterSku}）`,referenceCardIds:[master.id]},frame:state.snapshot.frames[masterId]??{x:420,y:y-380,w:300,h:300}});
+   operations.push({type:'upsert_card',card:{...master,id:masterId,name:`${sku} · 构图母版（${masterSku}）`,referenceCardIds:[`${skuNodePrefix(masterSku)}-composition-master-${master.assetId}`]},frame:state.snapshot.frames[masterId]??{x:420,y:y-380,w:300,h:300}});
   }
-  for(const [index,task]of(['main','scene-office','scene-outdoor']as const).entries()){
+  for(const [index,task]of(['main']as const).entries()){
    const promptId=`${prefix}-${task}-prompt`,generationId=`${prefix}-${task}-image`;
-   const label=task==='main'?'白底主图':task==='scene-office'?'办公桌面场景':'户外森林场景';
+   const label='白底主图';
    if(!cards.has(promptId)){
     const text=buildTextCard({id:promptId,name:`${sku} · ${label}提示词`,textContent:pendingEcommercePrompt});
     text.referenceCardIds=[factsId];
@@ -77,13 +132,13 @@ export async function bindEcommerceMaterials({projectId,sku,action='import',asse
   }
  }
  if(operations.length){const commandId=randomUUID();const result=await persistBeatDesignCommand({projectId,origin:'ui',commandId,idempotencyKey:commandId,expectedRevision:state.snapshotVersion,command:{type:'canvas.apply',operations}});if(!result.ok)throw new Error(result.message);}
- return {sku,assets:assets.length,hasProduct:assets.some(asset=>ecommerceTag(asset.metadata)?.role==='product'),taskIds:action==='workflow'?['main','scene-office','scene-outdoor'].map(task=>`${prefix}-${task}-image`):[]};
+ return {sku,assets:assets.length,hasProduct:assets.some(asset=>ecommerceTag(asset.metadata)?.role==='product'),taskIds:action==='workflow'?['main'].map(task=>`${prefix}-${task}-image`):[]};
 }
 
-export async function listEcommerceMaterials(projectId:string):Promise<{id:string;filename:string;url:string;tag:import('./ecommerce-contract').EcommerceTag}[]>{
+export async function listEcommerceMaterials(projectId:string):Promise<{id:string;filename:string;url:string;sha256?:string|null;tag:import('./ecommerce-contract').EcommerceTag}[]>{
  const {listProjectAssets}=await import('@/core/workspace-lib/assets/user-assets');
  const rows=await listProjectAssets({projectId,limit:1000});
- return rows.filter((asset:typeof rows[number])=>asset.type==='image'&&asset.source==='upload'&&ecommerceTag(asset.metadata)).map((asset:typeof rows[number])=>({id:asset.id,filename:asset.filename||asset.id,url:asset.publicUrl,tag:ecommerceTag(asset.metadata)!}));
+ return [...new Map<string,import('./ecommerce-profiles').EcommerceMaterial>(rows.filter((asset:typeof rows[number])=>asset.type==='image'&&asset.source==='upload'&&ecommerceTag(asset.metadata)).map((asset:typeof rows[number])=>[asset.id,{id:asset.id,filename:asset.filename||asset.id,url:asset.publicUrl,sha256:asset.sha256,tag:ecommerceTag(asset.metadata)!}] as const)).values()];
 }
 export async function editEcommerceMaterial({projectId,assetId,tag,expectedTag}:{projectId:string;assetId:string;tag:import('./ecommerce-contract').EcommerceTag;expectedTag:import('./ecommerce-contract').EcommerceTag}){
  const asset=await getProjectAssetById({projectId,assetId});

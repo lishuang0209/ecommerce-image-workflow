@@ -1,4 +1,4 @@
-import { assertSkuTextContext, ecommerceTag, preservationPrompt } from './ecommerce-contract';
+import { ecommercePromptPattern,sceneDescriptionForTask, assertSkuTextContext, ecommerceTag, preservationPrompt } from './ecommerce-contract';
 import { getProjectAssetById } from '@/core/workspace-lib/assets/user-assets';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
@@ -17,7 +17,7 @@ export async function draftCanvasProductPrompt(input: { projectId: string; cardI
     const state = await loadProjectWithLatestSnapshot({ projectId: input.projectId });
     const card = state?.snapshot.cards.find(item => item.id === input.cardId);
     if (!card || card.kind !== 'text') throw new Error('Text node does not belong to this project.');
-    const skuPrompt = /^(sku-[a-f0-9]{16})-(main|scene(?:-office|-outdoor)?)-prompt$/.exec(card.id);
+    const skuPrompt = ecommercePromptPattern.exec(card.id);
     if (skuPrompt) assertSkuTextContext(skuPrompt[1], card.referenceCardIds);
     const consumers = state!.snapshot.cards.filter(item => item.kind === 'generation' && item.type === 'image' && item.referenceCardIds.includes(card.id));
     const ratios = [...new Set(consumers.map(item => item.aspectRatio))];
@@ -31,7 +31,8 @@ export async function draftCanvasProductPrompt(input: { projectId: string; cardI
     const tags=await Promise.all(assetIds.map(async assetId=>ecommerceTag((await getProjectAssetById({projectId:input.projectId,assetId}))?.metadata)));
     const ownSku=state!.snapshot.cards.find(item=>item.id===skuPrompt?.[1]+'-facts')?.name.replace(/ · 商品信息$/,'');
     const constraints=preservationPrompt(tags.filter(tag=>!ownSku||tag?.sku===ownSku));
-    const scene=skuPrompt?.[2]==='scene-office'?'固定场景：办公桌面':skuPrompt?.[2]==='scene-outdoor'?'固定场景：户外森林':'';
+    const sceneDescription=sceneDescriptionForTask(card.id.replace(/-prompt$/,'-image'),Object.fromEntries(state!.snapshot.cards.map(item=>[item.id,item])));
+    const scene=skuPrompt?.[2]?.startsWith('scene')&&sceneDescription?'用户指定场景：'+sceneDescription:'';
     const task=skuPrompt?(skuPrompt[2]==='main'?'main':'scene'):input.task;
     const brief = [upstream, input.brief,constraints,scene].filter(Boolean).join('\n');
     if (brief.length > 16000) throw new Error('Connected product information is too long.');

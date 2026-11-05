@@ -402,7 +402,8 @@ export function GenerationCardNode({
                     display: 'block',
                     width: '100%',
                     height: '100%',
-                    objectFit: 'cover',
+                    // Show the whole generated image; "cover" silently cropped 4:5 results inside square frames.
+                    objectFit: 'contain',
                     cursor: 'zoom-in',
                   }}
                 />

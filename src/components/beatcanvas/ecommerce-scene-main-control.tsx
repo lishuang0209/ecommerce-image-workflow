@@ -1,3 +1,4 @@
+import {EcommerceSelect} from './ecommerce-select';
 import {useState} from 'react';
 import {useTranslations} from '@/core/workspace-lib/shims/next-intl';
 import type {CanvasCard} from '@/core/beatcanvas/canvas-types';
@@ -14,7 +15,7 @@ export function EcommerceSceneMainControl({scene,cards,onAdopt,disabled}:{scene:
   <div className="flex items-center gap-3">{selected&&<img src={selected.url} alt={t('sceneMainTitle')} className="h-14 w-14 rounded bg-white object-contain"/>}<div className="min-w-0 flex-1 space-y-1"><p className="text-xs font-medium">{adopted?t('sceneMainReady'):t('sceneMainTitle')}</p><p className="text-xs leading-5 text-[var(--beat-text-3)]">{state.images.length?t('sceneMainHint'):t('sceneMainMissing')}</p></div>
    {!adopted&&selected&&<button type="button" disabled={busy||disabled||!onAdopt} className="min-h-10 shrink-0 rounded bg-[var(--beat-accent)] px-3 text-xs text-black disabled:opacity-40" onClick={()=>void adopt()}>{busy?t('busy'):t('adoptThisMain')}</button>}
   </div>
-  {state.images.length>1&&<label className="block text-xs">{t('chooseMain')}<select disabled={busy||disabled} className="mt-1 min-h-9 w-full rounded border border-white/15 bg-[var(--beat-surface)] px-2 text-xs" value={selected?.assetId||''} onChange={event=>{setChosen(event.target.value);setError('');}}>{state.images.map((image,index)=><option key={image.assetId} value={image.assetId}>{t('version')} {index+1}{image.connected?' · '+t('connectedMain'):''}</option>)}</select></label>}
+  {state.images.length>1&&<label className="block text-xs">{t('chooseMain')}<EcommerceSelect disabled={busy||disabled} className="min-h-9 w-full rounded border border-white/15 bg-[var(--beat-surface)] px-2 text-xs" value={selected?.assetId||''} onChange={event=>{setChosen(event.target.value);setError('');}}>{state.images.map((image,index)=><option key={image.assetId} value={image.assetId}>{t('version')} {index+1}{image.connected?' · '+t('connectedMain'):''}</option>)}</EcommerceSelect></label>}
   {error&&<p role="alert" className="text-xs text-red-300">{error}</p>}
  </div>;
 }

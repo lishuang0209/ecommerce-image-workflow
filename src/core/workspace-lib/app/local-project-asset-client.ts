@@ -10,6 +10,7 @@ export type PersistedLocalProjectAsset = {
   filename: string;
   mimeType: string;
   sizeBytes: number;
+  reused?:boolean;
   width?: number;
   height?: number;
   durationMs?: number;
@@ -52,10 +53,10 @@ export const uploadLocalProjectAsset = async ({
     }
   );
   const payload = (await response.json().catch(() => null)) as
-    | { asset?: PersistedLocalProjectAsset; error?: string }
+    | { asset?: PersistedLocalProjectAsset; reused?:boolean; error?: string }
     | null;
   if (!response.ok || !payload?.asset) {
     throw new Error(payload?.error || 'Failed to save project asset locally');
   }
-  return payload.asset;
+  return {...payload.asset,reused:payload.reused===true};
 };

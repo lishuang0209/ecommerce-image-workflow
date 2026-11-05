@@ -1753,7 +1753,7 @@ export function BeatCanvasShell({
 
       {/* Canvas area */}
       <div className="relative flex-1 min-w-0">
-        {isWorkspaceReady && <EcommerceMaterialPanel onCreateNode={type=>type==='text'?insertTextCard():handleCreatePromptDraft('image')} onInsertAsset={asset=>insertProjectAsset({...asset,projectId})} projectId={projectId} cards={canvasCards} flush={() => snapshotFlushRef.current()} runTask={id => runGenerateDraft(id, { suppressResultFocus: true })} />}
+        {isWorkspaceReady && <EcommerceMaterialPanel onLocateCard={id=>{handleSelectShape(id);focusShape(id);}} onLocateSku={sku=>{const ids=Object.values(canvasCardsRef.current).filter(card=>card.name.startsWith(sku+' · ')&&editorRef.current?.getShape(card.id)).map(card=>card.id);if(ids.length)focusShapes(ids);}} onSavedSnapshot={(document,version)=>{recordCanvasHistory();snapshotAcceptRef.current(document,version);}} onCreateNode={type=>type==='text'?insertTextCard():handleCreatePromptDraft('image')} onInsertAsset={asset=>insertProjectAsset({...asset,projectId})} projectId={projectId} cards={canvasCards} flush={() => snapshotFlushRef.current()} runTask={id => runGenerateDraft(id, { suppressResultFocus: true })} />}
         <BeatCanvasFrontLayerProvider value={frontLayerValue}>
           <Suspense fallback={<BeatCanvasLoading />}>
             <BeatCanvasReactFlowEditor

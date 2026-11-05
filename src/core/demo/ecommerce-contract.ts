@@ -12,11 +12,34 @@ export function ecommerceTag(metadata: unknown): EcommerceTag | null {
  const parsed = ecommerceTagSchema.safeParse((metadata as { ecommerce?: unknown } | null)?.ecommerce);
  return parsed.success ? parsed.data : null;
 }
-export const ecommerceTaskPattern = /^(sku-[a-f0-9]{16})-(main|scene(?:-office|-outdoor)?)-image$/;
+export const ecommerceTaskPattern = /^(sku-[a-f0-9]{16})-(main|scene(?:-[a-z0-9]+)?)-image$/;
+export const ecommercePromptPattern=/^(sku-[a-f0-9]{16})-(main|scene(?:-[a-z0-9]+)?)-prompt$/;
+export function sceneDescriptionForTask(taskId:string,cards:Record<string,{textContent?:string}>){
+ const brief=cards[taskId.replace(/-image$/,'-brief')]?.textContent?.trim();
+ if(brief)return brief;
+ // Existing demo tasks keep their original meaning until explicitly edited.
+ return taskId.endsWith('-scene-office-image')?'办公桌面':taskId.endsWith('-scene-outdoor-image')?'户外森林':'';
+}
 export function preservationPrompt(tags: (EcommerceTag|null)[]) {
  return [...new Set(tags.filter((tag): tag is EcommerceTag=>!!tag&&tag.role!=='style').map(tag=>[
   `SKU：${tag.sku}`, tag.color?`确认颜色：${tag.color}`:'', tag.preserve?`必须保留：${tag.preserve}`:'',
  ].filter(Boolean).join('；')))].join('\n');
+}
+/**
+ * How one of the SKU's own photos should be used. Detail and scene photos prove appearance only: they must never
+ * decide the overall view, composition or background, otherwise the model copies whichever photo is listed first.
+ */
+export function productReferenceRole(tag: EcommerceTag | null) {
+ if (tag?.role === 'detail' || tag?.shot === 'detail') return '局部细节图；只用于确认材质、纹理、结构和Logo，禁止作为整体视角、构图或摆放依据';
+ if (tag?.shot === 'scene') return '实拍场景图；只用于确认商品外观，禁止沿用其背景、环境和拍摄角度';
+ if (tag?.shot === 'front') return '正面实拍；用于确认颜色、Logo、文字及整体结构';
+ return '当前 SKU 商品实拍；用于确认颜色、Logo、文字及结构，不沿用其拍摄角度或背景';
+}
+/** Whole-product views first, local details and scene photos last, so a detail close-up is never reference 1. */
+export function productReferenceRank(tag: EcommerceTag | null) {
+ if (tag?.role === 'detail' || tag?.shot === 'detail') return 2;
+ if (tag?.shot === 'scene') return 3;
+ return tag?.shot === 'front' ? 0 : 1;
 }
 export function assertSkuReferences(expectedSku: string, task: 'main'|'scene', tags: (EcommerceTag|null)[]) {
  if (!tags.some(tag => tag?.sku === expectedSku && tag.role === 'product')) throw new Error('This SKU needs at least one product image.');
@@ -60,4 +83,12 @@ export function validateEcommerceInputs({prefix,task,references,cards,assets}: {
  if(!product)throw new Error('Connect the product identity for this SKU.');
  assertSkuReferences(product.sku,task==='main'?'main':'scene',identityTags);
  return {sku:product.sku,tags:identityTags,hasMaster};
+}
+
+/** Local readiness check shared by workflow controls and paid-generation preflight. */
+export function isEcommerceTaskPromptReady(card:{id:string;referenceCardIds:string[]},cards:Record<string,{kind:string;textContent?:string;referenceCardIds:string[]}>){
+ const match=ecommerceTaskPattern.exec(card.id);if(!match)return false;
+ const id=card.id.replace(/-image$/,'-prompt'),text=cards[id];
+ if(text?.kind!=='text'||!card.referenceCardIds.includes(id)||!text.textContent?.trim()||text.textContent.trim()===pendingEcommercePrompt)return false;
+ try{assertSkuTextContext(match[1],text.referenceCardIds);return true;}catch{return false;}
 }

@@ -10,7 +10,8 @@ import {
   Loader2,
   Video,
 } from 'lucide-react';
-import type { ReactNode } from 'react';
+import {useState,type ReactNode} from 'react';
+import {presentRecentAssets} from '@/core/beatcanvas/recent-asset-presentation';
 
 import { beatPanelLabelClassName } from '@/components/app/composer-styles';
 import { cn } from '@/lib/utils';
@@ -20,6 +21,7 @@ export function HistoryPanel({
   projectId,
   excludeAssetIds = [],
   heading,
+  skuFilter,
 }: {
   onSelectAsset: (
     asset: RecentAsset & { mediaType: 'image' | 'video' | 'audio' }
@@ -27,7 +29,10 @@ export function HistoryPanel({
   projectId?: string | null;
   excludeAssetIds?: string[];
   heading?: string;
+  skuFilter?:string;
 }) {
+  const [showVersions,setShowVersions]=useState(false);
+  const ecommerceT=useTranslations('AppShell.studio.ecommerce');
   const t = useTranslations('AppShell.studio');
   const { data, isLoading, isError } = useQuery({
     queryKey: recentAssetsKeys.lists(projectId),
@@ -36,9 +41,13 @@ export function HistoryPanel({
   });
 
   const excluded=new Set(excludeAssetIds);
-  const images = (data?.images ?? []).filter(asset=>!excluded.has(asset.id));
-  const videos = (data?.videos ?? []).filter(asset=>!excluded.has(asset.id));
-  const audios = (data?.audios ?? []).filter(asset=>!excluded.has(asset.id));
+  const inSku=(asset:RecentAsset)=>!skuFilter||(asset.metadata as {ecommerce?:{sku?:string}}|null)?.ecommerce?.sku===skuFilter;
+  const imageRecords=(data?.images ?? []).filter(asset=>!excluded.has(asset.id)&&inSku(asset));
+  const allImages=presentRecentAssets(imageRecords,true);
+  const compactImages=presentRecentAssets(imageRecords);
+  const images=showVersions?allImages:compactImages;
+  const videos = presentRecentAssets((data?.videos ?? []).filter(asset=>!excluded.has(asset.id)&&inSku(asset)),true);
+  const audios = presentRecentAssets((data?.audios ?? []).filter(asset=>!excluded.has(asset.id)&&inSku(asset)),true);
   const loading = isLoading;
   const error = isError ? t('sidebar.loadFailed') : null;
 
@@ -67,6 +76,7 @@ export function HistoryPanel({
         </div>
       ) : null}
 
+      {!loading&&allImages.length>compactImages.length&&<div className="px-2 py-2"><p className="text-xs leading-6 text-white/50">{ecommerceT('recentCompactHint')}</p><button type="button" className="min-h-10 text-xs underline" onClick={()=>setShowVersions(value=>!value)}>{ecommerceT(showVersions?'hideResultVersions':'showResultVersions')} · {allImages.length-compactImages.length}</button></div>}
       {!loading && images.length > 0 ? (
         <AssetSection label={t('sidebar.recentImages')}>
           {images.map((img) => (

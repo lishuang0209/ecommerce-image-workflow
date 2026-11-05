@@ -159,6 +159,7 @@ export const listProjectAssets = async ({
       filename: userAsset.filename,
       mimeType: userAsset.mimeType,
       sizeBytes: userAsset.sizeBytes,
+      sha256: userAsset.sha256,
       width: userAsset.width,
       height: userAsset.height,
       durationMs: userAsset.durationMs,

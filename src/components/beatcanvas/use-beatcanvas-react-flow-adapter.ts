@@ -1428,14 +1428,8 @@ export function useBeatCanvasReactFlowAdapter({
     [canvasCardsRef, ensureVisibleResult, focusShape, focusShapes, materializeAnalysisReport, setCanvasCard]
   );
 
-  useEffect(() => {
-    if (!editorRef.current || isRestoringHistoryRef.current) return;
-    for (const output of Object.values(canvasCards)) {
-      if (!isCanvasOutputCard(output)) continue;
-      const source = canvasCardsRef.current[output.sourceConfigCardId];
-      if (isCanvasDraftCard(source)) ensureVisibleResult(output, source);
-    }
-  }, [canvasCards, canvasCardsRef, ensureVisibleResult]);
+  // Result placements are created on completion, not continuously repaired from
+  // take history. Removing a placement must survive edits and reloads.
 
   const createDraftCard = useCallback(
     ({

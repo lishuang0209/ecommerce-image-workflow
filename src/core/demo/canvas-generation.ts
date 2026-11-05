@@ -1,4 +1,4 @@
-import { ecommerceTag, assertSkuTextContext, pendingEcommercePrompt, ecommerceTaskPattern, preservationPrompt, validateEcommerceInputs } from './ecommerce-contract';
+import { sceneDescriptionForTask, ecommerceTag, isEcommerceTaskPromptReady, assertSkuTextContext, ecommerceTaskPattern, preservationPrompt, validateEcommerceInputs, productReferenceRole, productReferenceRank } from './ecommerce-contract';
 import { skuNodePrefix } from './ecommerce-materials';
 import { randomUUID, createHash } from 'node:crypto';
 import { mkdir, readFile, writeFile, rename, open } from 'node:fs/promises';
@@ -49,21 +49,24 @@ export async function reviewBailianCanvas(source: unknown) {
     const inputs=validateEcommerceInputs({prefix:skuTask[1],task:skuTask[2],references:card.referenceCardIds,cards,assets});
     if(skuNodePrefix(inputs.sku)!==skuTask[1])throw new Error('Connect the product identity for this SKU.');
     const constraints=preservationPrompt(inputs.tags);
-    const scene=skuTask[2]==='scene-office'?'办公桌面':skuTask[2]==='scene-outdoor'?'户外森林':'';
+    const scene=skuTask[2]==='main'?'':sceneDescriptionForTask(card.id,cards);
     const instructions=skuTask[2]==='main'
-      ? '任务约束：纯白背景，完整商品居中正面，柔和影棚光。商品颜色、Logo、文字、结构只以本 SKU 实拍参考为准。'+(inputs.hasMaster?'另一 SKU 母版只提供构图、角度、光影，不得复制它的颜色、Logo 或商品身份。':'')
-      : '任务约束：'+(scene?'场景为'+scene+'，':'')+'自然光，浅景深。商品主体以已采用主图为准，保持其颜色、Logo、文字和结构；风格参考只提供背景氛围。';
+      ? '任务约束：纯白背景，完整商品，柔和影棚光。商品颜色、Logo、文字、结构只以本 SKU 实拍参考为准。'+(inputs.hasMaster?'构图优先以母版图为准，沿用其商品数量、朝向、拍摄视角、主体大小、画面位置和光影。禁止镜像翻转，禁止擅自改成正面或另一侧。母版不提供商品颜色、Logo或身份。即使文本描述与母版视角不同，也以母版姿态为准。':'摆放、视角和构图以已采用提示词的构图要求为准；不要照搬任何一张参考图的拍摄角度、朝向或背景。')
+      : '任务约束：'+(scene?'场景为'+scene+'，':'')+'环境、光线与景深按用户场景要求和已采用提示词执行，不默认套用办公或森林环境。商品主体以已采用主图为准，保持其颜色、Logo、文字和结构；风格参考只提供背景氛围。';
+    const masterCard=cards[skuTask[1]+'-master-reference'];
+    // Main images: whole-product photos lead, details and scene photos follow; the master (if any) stays last as before.
+    if(skuTask[2]==='main')assets.sort((a,b)=>(masterCard?.assetId===a.id?4:productReferenceRank(ecommerceTag(a.metadata)))-(masterCard?.assetId===b.id?4:productReferenceRank(ecommerceTag(b.metadata))));
     const referenceRoles=assets.map((asset,index)=>{
       const tag=ecommerceTag(asset.metadata);
-      const master=cards[skuTask[1]+'-master-reference'];
-      return '参考图'+(index+1)+'：'+(master?.assetId===asset.id?'构图母版；只参考构图、角度、光影，禁止继承商品颜色与身份':skuTask[2]!=='main'&&cards[skuTask[1]+'-adopted-main']?.assetId===asset.id?'已采用主图；商品主体身份依据':tag?.role==='style'?'背景风格参考；不作为商品身份依据':'当前 SKU 商品实拍；保留颜色、Logo、文字及结构');
+      const master=masterCard;
+      return '参考图'+(index+1)+'：'+(master?.assetId===asset.id?'构图母版；只参考构图、角度、光影，禁止继承商品颜色与身份':skuTask[2]!=='main'&&cards[skuTask[1]+'-adopted-main']?.assetId===asset.id?'已采用主图；商品主体身份依据':tag?.role==='style'?'背景风格参考；不作为商品身份依据':productReferenceRole(tag));
     }).join('\n');
     prompt=[prompt,constraints,instructions,referenceRoles].filter(Boolean).join('\n');
     if(prompt.length>12000)throw new Error('Combined product information exceeds 12000 characters.');
     ecommerceOutput={sku:inputs.sku,task:skuTask[2],ratio:card.aspectRatio,preserve:[...new Set(inputs.tags.map(tag=>tag?.preserve).filter(Boolean))].join('；'),color:inputs.tags.find(tag=>tag?.color)?.color||''};
     const text = cards[`${skuTask[1]}-${skuTask[2]}-prompt`];
-    if (text?.kind !== 'text' || !card.referenceCardIds.includes(text.id) || text.textContent === pendingEcommercePrompt) throw new Error('Review and adopt the task prompt before generating images.');
-    assertSkuTextContext(skuTask[1], text.referenceCardIds);
+    if (!isEcommerceTaskPromptReady(card,cards)) throw new Error('Review and adopt the task prompt before generating images.');
+    assertSkuTextContext(skuTask[1], text!.referenceCardIds);
   }
   if (!(await getConfig('BAILIAN_API_KEY'))) throw new Error('Save your Bailian API key first.');
   return { generation, context, prompt, assets, ratio: card.aspectRatio, ecommerceOutput };

@@ -71,3 +71,43 @@ test('cross-SKU master is permitted only via an explicit adopted-master placemen
  assert.throws(()=>validateEcommerceInputs({prefix,task:'main',references:[],cards,assets:[own,master]}),/another SKU/);
  assert.throws(()=>validateEcommerceInputs({prefix,task:'main',references:[masterId],cards:{...cards,[masterId]:{...cards[masterId],referenceCardIds:[]}},assets:[own,master]}),/adopted/);
 });
+
+test('workflow and generation share prompt readiness including empty and cross-SKU text',async()=>{
+ const {isEcommerceTaskPromptReady,pendingEcommercePrompt}=await import('./ecommerce-contract');
+ const prefix='sku-1234567890abcdef',id=prefix+'-main-prompt';
+ const card={id:prefix+'-main-image',referenceCardIds:[id]};
+ const text={kind:'text',textContent:pendingEcommercePrompt,referenceCardIds:[prefix+'-facts']};
+ assert.equal(isEcommerceTaskPromptReady(card,{[id]:text}),false);
+ assert.equal(isEcommerceTaskPromptReady(card,{[id]:{...text,textContent:'  '}}),false);
+ const ready={...text,textContent:'Pure white background. Retain logo and product structure.'};
+ assert.equal(isEcommerceTaskPromptReady(card,{[id]:ready}),true);
+ assert.equal(isEcommerceTaskPromptReady({...card,referenceCardIds:[]},{[id]:ready}),false);
+ assert.equal(isEcommerceTaskPromptReady(card,{[id]:{...ready,referenceCardIds:['sku-abcdef1234567890-facts']}}),false);
+});
+
+
+test('reference roles keep detail and scene photos from deciding the main image view',async()=>{
+ const {productReferenceRole,productReferenceRank}=await import('./ecommerce-contract');
+ const product={sku:'S',role:'product'} as const;
+ const front={...product,shot:'front'} as const,detail={...product,shot:'detail'} as const,scene={...product,shot:'scene'} as const;
+ const roles=[front,detail,scene,product,{sku:'S',role:'detail'} as const].map(productReferenceRole);
+ assert.equal(new Set(roles.slice(0,4)).size,4,'each photo type gets its own instruction');
+ assert.match(roles[1],/禁止作为整体视角/);
+ assert.match(roles[2],/禁止沿用其背景/);
+ assert.equal(roles[4],roles[1],'a detail role is described like a detail shot');
+ // A sole close-up listed first must be moved behind whole-product photos.
+ const photos:{sku:string;role:'product'|'detail'|'style';shot?:'front'|'detail'|'scene'}[]=[detail,scene,product,front];
+ const ordered=photos.sort((a,b)=>productReferenceRank(a)-productReferenceRank(b)).map(tag=>tag.shot??'plain');
+ assert.deepEqual(ordered,['front','plain','detail','scene']);
+});
+
+test('custom scene ids are recognized and explicit descriptions override legacy demo defaults',async()=>{
+ const {ecommerceTaskPattern,ecommercePromptPattern,sceneDescriptionForTask}=await import('./ecommerce-contract');
+ const id='sku-1234567890abcdef-scene-abcdef1234567890-image';
+ assert.equal(ecommerceTaskPattern.exec(id)?.[2],'scene-abcdef1234567890');
+ assert.ok(ecommercePromptPattern.test(id.replace(/-image$/,'-prompt')));
+ assert.equal(sceneDescriptionForTask(id,{[id.replace(/-image$/,'-brief')]:{textContent:'梳妆台'}}),'梳妆台');
+ const legacy='sku-1234567890abcdef-scene-outdoor-image';
+ assert.equal(sceneDescriptionForTask(legacy,{}),'户外森林');
+ assert.equal(sceneDescriptionForTask(legacy,{[legacy.replace(/-image$/,'-brief')]:{textContent:'影棚静物'}}),'影棚静物');
+});

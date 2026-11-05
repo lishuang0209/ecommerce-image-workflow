@@ -1,3 +1,6 @@
+import {createHash} from 'node:crypto';
+import {ecommerceTag} from '@/core/demo/ecommerce-contract';
+import {listEcommerceMaterials} from '@/core/demo/ecommerce-materials';
 import { z } from 'zod';
 import { queryOrganizationAssets } from '@/core/organization/service';
 import { BeatDesignCommandError } from '@/core/commands/contracts';
@@ -138,6 +141,13 @@ async function POST({
         { error: 'Image contents do not match a supported raster format' },
         { status: 415 }
       );
+    }
+
+    const tag=ecommerceTag(assetMetadata);
+    if(assetClass==='original'&&mediaType==='image'&&tag){
+      const sha256=createHash('sha256').update(bytes).digest('hex');
+      const existing=(await listEcommerceMaterials(projectId)).find(item=>item.sha256===sha256&&JSON.stringify([item.tag.sku,item.tag.role,item.tag.shot||'',item.tag.color||'',item.tag.preserve||''])===JSON.stringify([tag.sku,tag.role,tag.shot||'',tag.color||'',tag.preserve||'']));
+      if(existing)return Response.json({asset:{id:existing.id,type:'image',publicUrl:existing.url,filename:existing.filename,mimeType:persistedMimeType,sizeBytes:bytes.byteLength},reused:true});
     }
 
     const persisted = await persistLocalProjectAsset({

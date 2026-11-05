@@ -18,6 +18,7 @@ async function GET({ request }: { request: Request }) {
 
     const imageFields = {
       id: userAsset.id,
+      sha256: userAsset.sha256,
       publicUrl: userAsset.publicUrl,
       filename: userAsset.filename,
       width: userAsset.width,
