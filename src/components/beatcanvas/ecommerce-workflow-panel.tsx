@@ -1,4 +1,5 @@
 import {EcommerceSelect} from './ecommerce-select';
+import {EcommerceResizePanel} from './ecommerce-resize-panel';
 import { useState } from 'react';
 import type { CanvasCard } from '@/core/beatcanvas/canvas-types';
 import { apiJsonPost } from '@/lib/api-client';
@@ -127,6 +128,7 @@ export function EcommerceWorkflowPanel({projectId,cards,flush,runTask,activeSku,
 
    </section>;
   })}
+  <EcommerceResizePanel projectId={projectId} cards={cards}/>
   {adopted.length>1&&<details className="space-y-2 pt-3"><summary className="cursor-pointer text-xs">{t('compareTitle')}</summary><p className="text-xs leading-6 text-[var(--beat-text-3)]">{t('compareHint')}</p><div className="grid grid-cols-2 gap-2">{adopted.map(item=><figure key={item.prefix}><img src={cards[`${item.prefix}-adopted-main`].url!} alt={item.sku} className="aspect-square w-full rounded bg-white object-contain"/><figcaption className="mt-1 text-xs">{item.sku}</figcaption></figure>)}</div></details>}
   {notice&&<p role="status" className="text-xs leading-6 text-green-300">{notice}</p>}
   {error&&<p role="alert" className="text-xs leading-6 text-red-300">{error}</p>}
