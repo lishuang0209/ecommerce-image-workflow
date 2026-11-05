@@ -165,9 +165,12 @@ export async function bindEcommerceMaterials({projectId,sku,action='import',asse
  function singleCompositionLine():CanvasOperation[]{
   const promptId=`${prefix}-main-prompt`,card=cards.get(promptId);
   if(card?.kind!=='text'||!card.textContent||!/^构图：/m.test(card.textContent)||card.textContent.includes(templateCompositionLine))return [];
-  return [{type:'upsert_text',cardId:promptId,name:card.name,textContent:card.textContent.replace(/^构图：.*$/m,templateCompositionLine),frame:state!.snapshot.frames[promptId]}];
+  // upsert_text rebuilds the card and would drop its references; keep the card and change only the text.
+  return [{type:'upsert_card',card:{...card,referenceCardIds:[...new Set([factsId,...card.referenceCardIds])],textContent:card.textContent.replace(/^构图：.*$/m,templateCompositionLine)}}];
  }
  const facts=cards.get(factsId);
+ // Every SKU prompt must keep its own facts reference, or generation refuses it.
+ for(const card of state.snapshot.cards)if(card.kind==='text'&&card.id.startsWith(prefix+'-')&&card.id.endsWith('-prompt')&&cards.has(factsId)&&!card.referenceCardIds.includes(factsId))operations.push({type:'upsert_card',card:{...card,referenceCardIds:[factsId,...card.referenceCardIds]}});
  if(facts?.kind==='text'&&facts.textContent&&legacyFactsLines.test(facts.textContent))operations.push({type:'upsert_text',cardId:factsId,name:facts.name,textContent:facts.textContent.replace(legacyFactsLines,'').trim(),frame:state.snapshot.frames[factsId]});
  if(action!=='template'&&cards.has(templateId)&&!operations.some(op=>op.type==='upsert_text'&&op.cardId===templateId)){
   const frame=templatePosition();

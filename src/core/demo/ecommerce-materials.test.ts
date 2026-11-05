@@ -52,7 +52,18 @@ test('SKU workflow persists explicit adoption and composition-only master withou
  const id=randomUUID();
  const result=await persistBeatDesignCommand({projectId:project.id,origin:'ui',commandId:id,idempotencyKey:id,expectedRevision:state.snapshotVersion,command:{type:'canvas.apply',operations:[{type:'upsert_text',cardId:bp+'-facts',textContent:'User facts remain authoritative.'},{type:'upsert_card',card:{...state.snapshot.cards.find(card=>card.id===bp+'-main-image')!,prompt:'Revised main settings'}}]}});assert.ok(result.ok);
  const template={count:'single',facing:'left',scale:'medium'} as const;
+ {
+  const before=await snapshot(),prompt=before.snapshot.cards.find(card=>card.id===bp+'-main-prompt')!;
+  const id=randomUUID();
+  assert.ok((await persistBeatDesignCommand({projectId:project.id,origin:'ui',commandId:id,idempotencyKey:id,expectedRevision:before.snapshotVersion,command:{type:'canvas.apply',operations:[{type:'upsert_card',card:{...prompt,textContent:'任务：白底\n构图：两只鞋并排。\n输出画幅：1:1。'}}]}})).ok);
+ }
  await bind(black,{action:'template',template});
+ {
+  // Saving a template rewrites only the composition line and never drops the prompt's facts link.
+  const prompt=(await snapshot()).snapshot.cards.find(card=>card.id===bp+'-main-prompt');
+  assert.ok(prompt?.kind==='text'&&prompt.referenceCardIds.includes(bp+'-facts'));
+  assert.ok(prompt?.kind==='text'&&/构图：严格按「构图模板」执行/.test(prompt.textContent)&&!prompt.textContent.includes('两只鞋并排'));
+ }
  const blackTemplate=(await snapshot()).snapshot.cards.find(card=>card.id===bp+'-composition-template');
  const laid=(await snapshot()).snapshot.frames;
  // The template sits directly below the facts card, in the same column, without overlapping it.
