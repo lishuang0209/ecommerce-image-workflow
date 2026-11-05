@@ -20,7 +20,7 @@ export function EcommerceMaterialPanel({projectId,cards,flush,runTask,onCreateNo
  const [workflowSku,setWorkflowSku]=useState('');
  const [importSkuTouched,setImportSkuTouched]=useState(false);
  const [profiles,setProfiles]=useState<Record<string,EcommerceProfile>>({});
- const [sku,setSku]=useState(''),[newSku,setNewSku]=useState(''),[color,setColor]=useState(''),[preserve,setPreserve]=useState('');
+ const [sku,setSku]=useState(''),[newSku,setNewSku]=useState(''),[color,setColor]=useState(''),[preserve,setPreserve]=useState(''),[product,setProduct]=useState('');
  const role='product' as const,shot='' as const;
  const [files,setFiles]=useState<Material[]>([]),[busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState('');
  const previews=useRef(new Set<string>());
@@ -40,7 +40,7 @@ export function EcommerceMaterialPanel({projectId,cards,flush,runTask,onCreateNo
    const frozenSku=files.find(item=>item.uploaded)?.sku;
    if(frozenSku&&frozenSku!==target)throw new Error(t('missingSku'));
    if(!sku&&frozenSku!==target&&savedGroups.some(group=>group.sku===target))throw new Error(t('skuExists'));
-   const importProfiles=sku?allProfiles:{...allProfiles,[target]:{sku:target,color:color.trim(),preserve:preserve.trim(),conflicting:false}};
+   const importProfiles=sku?allProfiles:{...allProfiles,[target]:{sku:target,product:product.trim(),color:color.trim(),preserve:preserve.trim(),conflicting:false}};
    if(!sku)setProfiles(current=>({...current,[target]:importProfiles[target]}));
    for(const item of files){if(!item.uploaded)item.sku=target;}
    if(files.some(item=>!importProfiles[item.sku]))throw new Error(t('missingSku'));
@@ -49,7 +49,7 @@ export function EcommerceMaterialPanel({projectId,cards,flush,runTask,onCreateNo
    let reused=0;
    for(const item of files){
     const profile=importProfiles[item.sku];
-    if(!item.uploaded){const saved=await uploadLocalProjectAsset({projectId,file:item.file,metadata:{ecommerce:{sku:item.sku,role:item.role,shot:item.shot||undefined,color:profile.color,preserve:profile.preserve}}});if(saved.reused)reused++;item.uploaded=true;update(item.id,{uploaded:true});}
+    if(!item.uploaded){const saved=await uploadLocalProjectAsset({projectId,file:item.file,metadata:{ecommerce:{sku:item.sku,...(profile.product?{product:profile.product}:{}),role:item.role,shot:item.shot||undefined,color:profile.color,preserve:profile.preserve}}});if(saved.reused)reused++;item.uploaded=true;update(item.id,{uploaded:true});}
    }
    let allHaveProduct=true;
    for(const name of new Set(files.filter(item=>!item.bound).map(item=>item.sku))){
@@ -57,7 +57,7 @@ export function EcommerceMaterialPanel({projectId,cards,flush,runTask,onCreateNo
     for(const item of files.filter(item=>item.sku===name)){item.bound=true;update(item.id,{bound:true});}
    }
    for(const item of files){URL.revokeObjectURL(item.preview);previews.current.delete(item.preview);}
-   setWorkflowSku(target);setSku(target);setNewSku('');setColor('');setPreserve('');setFiles([]);await library.refetch();setNotice((allHaveProduct?t('saved'):t('needsProduct'))+(reused?' '+t('duplicateImportsReused')+' '+reused:''));
+   setWorkflowSku(target);setSku(target);setNewSku('');setColor('');setPreserve('');setProduct('');setFiles([]);await library.refetch();setNotice((allHaveProduct?t('saved'):t('needsProduct'))+(reused?' '+t('duplicateImportsReused')+' '+reused:''));
   }catch(cause){setError(cause instanceof Error?cause.message:t('failed'));}finally{setBusy(false);}
  }
  function addFiles(incoming:File[]){
@@ -104,7 +104,7 @@ export function EcommerceMaterialPanel({projectId,cards,flush,runTask,onCreateNo
       </div>)}</div>}
       <fieldset disabled={partiallySaved} className="space-y-3">
        <label className="block text-xs">{t('chooseSku')}<EcommerceSelect className={input} value={sku} onChange={event=>{setImportSkuTouched(true);setSku(event.target.value);setError('');}}><option value="">{t('newSku')}</option>{skuOptions}</EcommerceSelect></label>
-       {!sku?<div className="space-y-3"><label className="block text-xs">{t('shortSkuName')}<input className={input} maxLength={100} value={newSku} onChange={event=>setNewSku(event.target.value)} placeholder={t('skuPlaceholder')}/></label>
+       {!sku?<div className="space-y-3"><label className="block text-xs">{t('productName')}<input className={input} maxLength={100} list="ecommerce-product-names" value={product} onChange={event=>setProduct(event.target.value)} placeholder={t('productNamePlaceholder')}/><datalist id="ecommerce-product-names">{[...new Set(savedGroups.map(group=>group.product).filter(Boolean))].map(name=><option key={name} value={name}/>)}</datalist><span className="mt-1 block text-[11px] text-[var(--beat-text-3)]">{t('productNameHint')}</span></label><label className="block text-xs">{t('shortSkuName')}<input className={input} maxLength={100} value={newSku} onChange={event=>setNewSku(event.target.value)} placeholder={t('skuPlaceholder')}/></label>
         <details className="rounded-lg bg-white/[0.02] p-3"><summary className="cursor-pointer text-xs text-[var(--beat-text-3)]">{t('optionalProductInfo')}</summary><div className="mt-3 space-y-3"><label className="block text-xs">{t('color')}<input className={input} maxLength={100} value={color} onChange={event=>setColor(event.target.value)} placeholder={t('colorExample')}/></label><label className="block text-xs">{t('preserve')}<textarea className={input+' py-2'} maxLength={1000} value={preserve} placeholder={t('preserveHint')} onChange={event=>setPreserve(event.target.value)}/></label></div></details>
        </div>:active?.conflicting?<p className="text-xs text-amber-300">{t('profileConflictShort')}</p>:<p className="text-[11px] text-[var(--beat-text-3)]">{t('existingInfoReused')}</p>}
       </fieldset>
@@ -120,7 +120,7 @@ export function EcommerceMaterialPanel({projectId,cards,flush,runTask,onCreateNo
    </div>
    {panel==='nodes'&&<div className="grid grid-cols-2 gap-3">{(['image','text']as const).map(type=>{const Icon=type==='image'?ImagePlus:FileText;const label=t(type==='image'?'addImageNode':'addTextNode');return <button key={type} type="button" title={label} aria-label={label} disabled={!onCreateNode} className="group flex min-h-28 flex-col items-center justify-center gap-3 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-4 text-[var(--beat-text-2)] transition-colors duration-150 hover:border-orange-400/40 hover:bg-orange-400/[0.06] hover:text-white active:bg-orange-400/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--beat-surface)] disabled:cursor-not-allowed disabled:opacity-40" onClick={()=>{onCreateNode?.(type);setPanel(null);}}><span className="flex size-12 items-center justify-center rounded-xl bg-white/5 transition-colors group-hover:bg-orange-400/10 group-hover:text-orange-400"><Icon aria-hidden="true" className="size-6" strokeWidth={1.6}/></span><span className="text-xs font-medium">{label}</span></button>;})}</div>}
 
-   <div hidden={panel!=='workflow'}><EcommerceWorkflowPanel onLocatePrompt={onLocateCard} onSavedSnapshot={onSavedSnapshot} materialSkus={savedGroups.map(group=>group.sku)} activeSku={currentProductSku} onSkuChange={setWorkflowSku} projectId={projectId} cards={cards} flush={flush} runTask={runTask}/></div>
+   <div hidden={panel!=='workflow'}><EcommerceWorkflowPanel skuProducts={Object.fromEntries(savedGroups.map(group=>[group.sku,group.product||'']))} onLocatePrompt={onLocateCard} onSavedSnapshot={onSavedSnapshot} materialSkus={savedGroups.map(group=>group.sku)} activeSku={currentProductSku} onSkuChange={setWorkflowSku} projectId={projectId} cards={cards} flush={flush} runTask={runTask}/></div>
   </section>}
  </div>;
 }

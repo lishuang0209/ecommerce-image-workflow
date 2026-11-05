@@ -7,7 +7,7 @@ import { persistBeatDesignCommand } from '@/core/commands/persist';
 import type { CanvasOperation } from '@/core/commands/canvas-commands';
 import type { CanvasCard, CanvasGenerationCard } from '@/core/beatcanvas/canvas-types';
 import { buildTextCard } from '@/core/beatcanvas/text-nodes';
-import { ecommerceTag, pendingEcommercePrompt, ecommerceTaskPattern, preservationPrompt } from './ecommerce-contract';
+import { ecommerceTag, pendingEcommercePrompt, ecommerceTaskPattern, preservationPrompt, assertSameProduct, compositionTemplateText, type CompositionTemplate } from './ecommerce-contract';
 import { getProjectAssetById } from '@/core/workspace-lib/assets/user-assets';
 
 export const skuNodePrefix = (sku: string) => `sku-${createHash('sha256').update(sku).digest('hex').slice(0,16)}`;
@@ -20,8 +20,8 @@ function copiedScenePrompt(cards:Map<string,CanvasCard>,assets:{metadata:unknown
  if(!text||text===pendingEcommercePrompt||!from||!to||!text.includes(from))return null;
  return text.split(from).join(to);
 }
-export async function bindEcommerceMaterials({projectId,sku,action='import',assetId,masterSku,masterAssetId,clearMaster,sceneDescription,taskId,copyPromptFrom}: {
- projectId:string;sku:string;action?:'import'|'workflow'|'adopt'|'master'|'scene';assetId?:string;masterSku?:string;masterAssetId?:string;clearMaster?:boolean;sceneDescription?:string;taskId?:string;copyPromptFrom?:string;
+export async function bindEcommerceMaterials({projectId,sku,action='import',assetId,masterSku,masterAssetId,clearMaster,sceneDescription,taskId,copyPromptFrom,template}: {
+ projectId:string;sku:string;action?:'import'|'workflow'|'adopt'|'master'|'scene'|'template';template?:CompositionTemplate;assetId?:string;masterSku?:string;masterAssetId?:string;clearMaster?:boolean;sceneDescription?:string;taskId?:string;copyPromptFrom?:string;
 }):Promise<{sku:string;assets:number;hasProduct:boolean;taskIds:string[]}> {
  const state=await loadProjectWithLatestSnapshot({projectId});
  if(!state)throw new Error('Project is unavailable.');
@@ -37,10 +37,11 @@ export async function bindEcommerceMaterials({projectId,sku,action='import',asse
  type AssetRow={id:string;filename:string|null;publicUrl:string;metadata:unknown;type:string};
  const rows:AssetRow[]=await db.select({id:userAsset.id,filename:userAsset.filename,publicUrl:userAsset.publicUrl,metadata:userAsset.metadata,type:userAsset.type}).from(userAsset).innerJoin(projectAssetMembership,eq(projectAssetMembership.assetId,userAsset.id)).where(and(eq(projectAssetMembership.projectId,projectId),eq(userAsset.type,'image')));
  // Generated outputs never become raw product photos on a later import.
+ const photoTags=rows.filter(asset=>!(asset.metadata as {ecommerceOutput?:unknown}|null)?.ecommerceOutput).map(asset=>ecommerceTag(asset.metadata));
  const assets=[...new Map(rows.filter(asset=>ecommerceTag(asset.metadata)?.sku===sku&&!(asset.metadata as {ecommerceOutput?:unknown}|null)?.ecommerceOutput).map(asset=>[asset.id,asset])).values()];
  if(!assets.length)throw new Error('Import product photos for this SKU first.');
  const cards=new Map<string,CanvasCard>(state.snapshot.cards.map(card=>[card.id,card]));
- const prefix=skuNodePrefix(sku),factsId=`${prefix}-facts`;
+ const prefix=skuNodePrefix(sku),factsId=`${prefix}-facts`,templateId=`${prefix}-composition-template`;
  const factsFrames=state.snapshot.cards.filter(card=>/^sku-[a-f0-9]{16}-facts$/.test(card.id)).map(card=>state.snapshot.frames[card.id]?.y??100);
  const y=state.snapshot.frames[factsId]?.y??(factsFrames.length?Math.max(...factsFrames)+1600:100);
  const operations:CanvasOperation[]=[];
@@ -53,6 +54,11 @@ export async function bindEcommerceMaterials({projectId,sku,action='import',asse
   }
   if(!cards.has(factsId))operations.push({type:'upsert_text',cardId:factsId,name:`${sku} · 商品信息`,textContent:`${preservationPrompt(assets.map(asset=>ecommerceTag(asset.metadata)))}\n商品名称、型号与容量：请核对后填写，未确认的规格不应补写。\n素材标签会在生成时自动读取；请在此补充其他商品事实。`,frame:{x:-40,y,w:400,h:400}});
  }else if(action==='scene'){
+  if(copyPromptFrom){
+   const sourceSku=photoTags.find(tag=>tag&&skuNodePrefix(tag.sku)===copyPromptFrom.replace(/-scene-.*$/,''))?.sku;
+   if(!sourceSku)throw new Error('The scene to copy is unavailable.');
+   assertSameProduct(sku,sourceSku,photoTags);
+  }
   const description=sceneDescription?.trim();
   if(!description||description.length>800)throw new Error('Enter a scene description of 1–800 characters.');
   const id=taskId||`${prefix}-scene-${randomUUID().replaceAll('-','')}-image`;
@@ -82,6 +88,9 @@ export async function bindEcommerceMaterials({projectId,sku,action='import',asse
   for(const id of [`${prefix}-composition-master`,`${prefix}-composition-master-${assetId}`]){
    operations.push({type:'upsert_card',card:{...adopted,id,name:`${sku} · 同款构图参考`,referenceCardIds:[`${prefix}-main-image`]},frame:state.snapshot.frames[id]??{x:1370,y,w:340,h:360}});
   }
+ }else if(action==='template'){
+  if(!template)throw new Error('Choose count, facing and size for the composition template.');
+  operations.push(...templateOperations(compositionTemplateText(template)));
  }else if(action==='adopt'){
   if(!assetId)throw new Error('Choose a successful listing image.');
   const asset=await getProjectAssetById({projectId,assetId});
@@ -110,7 +119,11 @@ export async function bindEcommerceMaterials({projectId,sku,action='import',asse
    const master=cards.get(`${skuNodePrefix(masterSku)}-composition-master`);
    if(master?.kind!=='asset'||!master.assetId)throw new Error('Mark an adopted main image as a composition reference first.');
    if(masterAssetId&&master.assetId!==masterAssetId)throw new Error('Composition reference changed. Reload and select it again.');
+   assertSameProduct(sku,masterSku,photoTags);
    masterId=`${prefix}-master-reference`;
+   const masterTemplate=cards.get(`${skuNodePrefix(masterSku)}-composition-template`);
+   // Reusing a composition also reuses its template, so the explicit pose rules travel with the master image.
+   if(masterTemplate?.kind==='text'&&masterTemplate.textContent?.trim()&&!cards.has(templateId))operations.push(...templateOperations(masterTemplate.textContent));
    operations.push({type:'upsert_card',card:{...master,id:masterId,name:`${sku} · 构图母版（${masterSku}）`,referenceCardIds:[`${skuNodePrefix(masterSku)}-composition-master-${master.assetId}`]},frame:state.snapshot.frames[masterId]??{x:420,y:y-380,w:300,h:300}});
   }
   for(const [index,task]of(['main']as const).entries()){
@@ -123,13 +136,19 @@ export async function bindEcommerceMaterials({projectId,sku,action='import',asse
    }
    const own=assets.filter(asset=>ecommerceTag(asset.metadata)?.role!=='style').map(asset=>`sku-asset-${asset.id}`);
    const adoptedId=`${prefix}-adopted-main`;
-   const references=task==='main'?[promptId,...own,...(masterId?[masterId]:[])]:[promptId,...(cards.has(adoptedId)?[adoptedId]:[]),...assets.filter(asset=>ecommerceTag(asset.metadata)?.role==='style').map(asset=>`sku-asset-${asset.id}`)];
+   const hasTemplate=cards.has(templateId)||operations.some(op=>op.type==='upsert_text'&&op.cardId===templateId);
+   const references=task==='main'?[promptId,...own,...(hasTemplate?[templateId]:[]),...(masterId?[masterId]:[])]:[promptId,...(cards.has(adoptedId)?[adoptedId]:[]),...assets.filter(asset=>ecommerceTag(asset.metadata)?.role==='style').map(asset=>`sku-asset-${asset.id}`)];
    const existing=cards.get(generationId);
    // Explicit template application may add a master, but never resets edited prompts or existing references on a routine repeat.
    if(existing&&!(masterId&&task==='main'))continue;
-   const generation:CanvasGenerationCard=existing?.kind==='generation'?{...existing,referenceCardIds:[...new Set([...existing.referenceCardIds.filter(id=>id!==`${prefix}-master-reference`),masterId!])]}:{...buildTextCard({id:generationId,name:`${sku} · ${label}`}),kind:'generation',type:'image',modelId:'qwen-image-2.1',aspectRatio:task==='main'?'1:1':'4:5',outputQuality:'1k',referenceCardIds:references};
+   const generation:CanvasGenerationCard=existing?.kind==='generation'?{...existing,referenceCardIds:[...new Set([...existing.referenceCardIds.filter(id=>id!==`${prefix}-master-reference`),...(hasTemplate?[templateId]:[]),masterId!])]}:{...buildTextCard({id:generationId,name:`${sku} · ${label}`}),kind:'generation',type:'image',modelId:'qwen-image-2.1',aspectRatio:task==='main'?'1:1':'4:5',outputQuality:'1k',referenceCardIds:references};
    operations.push({type:'upsert_card',card:generation,...(!existing?{frame:{x:900,y:y+index*510,w:400,h:400}}:{})});
   }
+ }
+ function templateOperations(text:string):CanvasOperation[]{
+  const main=cards.get(`${prefix}-main-image`);
+  return [{type:'upsert_text',cardId:templateId,name:`${sku} · 构图模板`,textContent:text,frame:state!.snapshot.frames[templateId]??{x:-40,y:y-300,w:400,h:240}},
+   ...(main?.kind==='generation'&&!main.referenceCardIds.includes(templateId)?[{type:'set_references',cardId:main.id,referenceCardIds:[...main.referenceCardIds,templateId]} as CanvasOperation]:[])];
  }
  if(operations.length){const commandId=randomUUID();const result=await persistBeatDesignCommand({projectId,origin:'ui',commandId,idempotencyKey:commandId,expectedRevision:state.snapshotVersion,command:{type:'canvas.apply',operations}});if(!result.ok)throw new Error(result.message);}
  return {sku,assets:assets.length,hasProduct:assets.some(asset=>ecommerceTag(asset.metadata)?.role==='product'),taskIds:action==='workflow'?['main'].map(task=>`${prefix}-${task}-image`):[]};
@@ -154,7 +173,7 @@ export async function editEcommerceMaterial({projectId,assetId,tag,expectedTag}:
 }
 
 /** One SKU-level edit, committed atomically to all original photo tags. */
-export async function editEcommerceProfile({projectId,sku,color,preserve,expected}:{projectId:string;sku:string;color:string;preserve:string;expected:{assetId:string;tag:import('./ecommerce-contract').EcommerceTag}[]}){
+export async function editEcommerceProfile({projectId,sku,color,preserve,product,expected}:{projectId:string;sku:string;color:string;preserve:string;product?:string;expected:{assetId:string;tag:import('./ecommerce-contract').EcommerceTag}[]}){
  const {withDatabaseTransaction}=await import('@/core/db/transaction-context');
  return withDatabaseTransaction(async()=>{
   const materials=(await listEcommerceMaterials(projectId)).filter(item=>item.tag.sku===sku);
@@ -165,7 +184,7 @@ export async function editEcommerceProfile({projectId,sku,color,preserve,expecte
   }
   const state=await loadProjectWithLatestSnapshot({projectId});
   if(state?.snapshot.cards.some(card=>card.kind==='generation'&&card.id.startsWith(skuNodePrefix(sku)+'-')&&(card.status==='pending'||card.status==='processing')))throw new Error('Wait for this SKU to finish generating before changing its profile.');
-  for(const item of materials)await editEcommerceMaterial({projectId,assetId:item.id,tag:{...item.tag,color,preserve},expectedTag:item.tag});
+  for(const item of materials)await editEcommerceMaterial({projectId,assetId:item.id,tag:{...item.tag,color,preserve,...(product!==undefined?{product:product.trim()||undefined}:{})},expectedTag:item.tag});
   return {saved:true,updated:materials.length};
  });
 }

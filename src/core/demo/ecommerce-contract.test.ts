@@ -111,3 +111,21 @@ test('custom scene ids are recognized and explicit descriptions override legacy 
  assert.equal(sceneDescriptionForTask(legacy,{}),'户外森林');
  assert.equal(sceneDescriptionForTask(legacy,{[legacy.replace(/-image$/,'-brief')]:{textContent:'影棚静物'}}),'影棚静物');
 });
+
+test('composition template text round-trips and is complete only with all three choices', async () => {
+ const { compositionTemplateText, parseCompositionTemplate, isCompleteCompositionTemplate } = await import('./ecommerce-contract');
+ const text = compositionTemplateText({ count: 'pair', facing: 'threeQuarter', scale: 'large' });
+ assert.deepEqual(parseCompositionTemplate(text), { count: 'pair', facing: 'threeQuarter', scale: 'large' });
+ assert.ok(isCompleteCompositionTemplate(text));
+ assert.ok(!isCompleteCompositionTemplate(text.split('\n').filter(line => !line.startsWith('朝向：')).join('\n')));
+ assert.ok(!isCompleteCompositionTemplate(undefined));
+});
+
+test('product name is part of the facts and only identical non-empty products match', async () => {
+ const { preservationPrompt, assertSameProduct } = await import('./ecommerce-contract');
+ const tags = [{ sku: 'White', product: 'Air Force 1', role: 'product' as const }, { sku: 'Black', product: 'Air Force 1', role: 'product' as const }, { sku: 'Cup', product: 'Thermos', role: 'product' as const }, { sku: 'Bare', role: 'product' as const }];
+ assert.match(preservationPrompt([tags[0]]), /商品：Air Force 1；SKU：White/);
+ assert.doesNotThrow(() => assertSameProduct('White', 'Black', tags));
+ assert.throws(() => assertSameProduct('White', 'Cup', tags), /different products/);
+ assert.throws(() => assertSameProduct('White', 'Bare', tags), /same product name/);
+});

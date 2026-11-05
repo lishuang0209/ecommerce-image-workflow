@@ -4,7 +4,7 @@ import {ecommerceTag,ecommerceTaskPattern} from '@/core/demo/ecommerce-contract'
 import { createFileRoute } from '@tanstack/react-router';
 import { z } from 'zod';
 import { bindEcommerceMaterials, listEcommerceMaterials, editEcommerceMaterial,editEcommerceProfile,skuNodePrefix } from '@/core/demo/ecommerce-materials';
-import { ecommerceTagSchema } from '@/core/demo/ecommerce-contract';
+import { ecommerceTagSchema, compositionTemplateSchema } from '@/core/demo/ecommerce-contract';
 import { validateTrustedWorkspaceJsonMutation } from '@/lib/trusted-local-request';
 import { readRequestJsonWithLimit } from '@/lib/request-body-limit';
 async function POST({request}:{request:Request}) {
@@ -21,7 +21,7 @@ async function POST({request}:{request:Request}) {
   if(!saved)throw new Error('Project is unavailable.');
   return Response.json({document:saved.snapshot,version:saved.snapshotVersion});
  }
- const input=z.object({projectId:z.string().uuid(),sku:ecommerceTagSchema.shape.sku,action:z.enum(['import','workflow','adopt','master','scene']).optional(),assetId:z.string().uuid().optional(),masterSku:ecommerceTagSchema.shape.sku.optional(),masterAssetId:z.string().uuid().optional(),clearMaster:z.boolean().optional(),sceneDescription:z.string().trim().min(1).max(800).optional(),taskId:z.string().max(128).optional(),copyPromptFrom:z.string().max(128).optional()}).strict().parse(body);const result=await bindEcommerceMaterials(input);const saved=await loadProjectWithLatestSnapshot({projectId:input.projectId});if(!saved)throw new Error('Project is unavailable.');return Response.json({...result,document:saved.snapshot,version:saved.snapshotVersion});}
+ const input=z.object({projectId:z.string().uuid(),sku:ecommerceTagSchema.shape.sku,action:z.enum(['import','workflow','adopt','master','scene','template']).optional(),assetId:z.string().uuid().optional(),masterSku:ecommerceTagSchema.shape.sku.optional(),masterAssetId:z.string().uuid().optional(),clearMaster:z.boolean().optional(),sceneDescription:z.string().trim().min(1).max(800).optional(),taskId:z.string().max(128).optional(),copyPromptFrom:z.string().max(128).optional(),template:compositionTemplateSchema.optional()}).strict().parse(body);const result=await bindEcommerceMaterials(input);const saved=await loadProjectWithLatestSnapshot({projectId:input.projectId});if(!saved)throw new Error('Project is unavailable.');return Response.json({...result,document:saved.snapshot,version:saved.snapshotVersion});}
  catch(error){return Response.json({error:error instanceof Error?error.message:'Unable to bind SKU materials.'},{status:400});}
 }
 async function GET({request}:{request:Request}){
@@ -30,7 +30,7 @@ async function GET({request}:{request:Request}){
 }
 async function PATCH({request}:{request:Request}){
  const trust=validateTrustedWorkspaceJsonMutation(request);if(!trust.ok)return Response.json({error:trust.message},{status:trust.status});
- try{const input=z.union([z.object({projectId:z.string().uuid(),assetId:z.string().uuid(),tag:ecommerceTagSchema,expectedTag:ecommerceTagSchema}).strict(),z.object({projectId:z.string().uuid(),sku:ecommerceTagSchema.shape.sku,color:z.string().trim().max(100),preserve:z.string().trim().max(1000),expected:z.array(z.object({assetId:z.string().uuid(),tag:ecommerceTagSchema}).strict()).min(1).max(500)}).strict()]).parse(await readRequestJsonWithLimit(request,1024*1024));return Response.json('expected' in input?await editEcommerceProfile(input):await editEcommerceMaterial(input));}
+ try{const input=z.union([z.object({projectId:z.string().uuid(),assetId:z.string().uuid(),tag:ecommerceTagSchema,expectedTag:ecommerceTagSchema}).strict(),z.object({projectId:z.string().uuid(),sku:ecommerceTagSchema.shape.sku,color:z.string().trim().max(100),preserve:z.string().trim().max(1000),product:z.string().trim().max(100).optional(),expected:z.array(z.object({assetId:z.string().uuid(),tag:ecommerceTagSchema}).strict()).min(1).max(500)}).strict()]).parse(await readRequestJsonWithLimit(request,1024*1024));return Response.json('expected' in input?await editEcommerceProfile(input):await editEcommerceMaterial(input));}
  catch(error){return Response.json({error:error instanceof Error?error.message:'Unable to save material tags.'},{status:400});}
 }
 export const Route=createFileRoute('/api/demo/ecommerce-materials')({server:{handlers:{GET,POST,PATCH}}});

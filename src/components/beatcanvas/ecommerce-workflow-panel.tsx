@@ -4,13 +4,15 @@ import { useState } from 'react';
 import type { CanvasCard } from '@/core/beatcanvas/canvas-types';
 import { apiJsonPost } from '@/lib/api-client';
 import { useTranslations } from '@/core/workspace-lib/shims/next-intl';
-import { sceneDescriptionForTask,ecommerceTaskPattern,isEcommerceTaskPromptReady } from '@/core/demo/ecommerce-contract';
+import { sceneDescriptionForTask,ecommerceTaskPattern,isEcommerceTaskPromptReady,compositionOptions,parseCompositionTemplate,isCompleteCompositionTemplate,type CompositionTemplate } from '@/core/demo/ecommerce-contract';
 import { runTasksInOrder } from '@/core/demo/serial-tasks';
 
-export function EcommerceWorkflowPanel({projectId,cards,flush,runTask,activeSku,onSkuChange,onSavedSnapshot,materialSkus=[],onLocatePrompt}:{onLocatePrompt?:(id:string)=>void;materialSkus?:string[];onSavedSnapshot:(document:import('@/core/projects/project-snapshot').ProjectSnapshotDocument,version:number)=>void;activeSku:string;onSkuChange:(sku:string)=>void;projectId:string;cards:Record<string,CanvasCard>;flush:()=>Promise<void>;runTask:(id:string)=>Promise<boolean>}){
+export function EcommerceWorkflowPanel({projectId,cards,flush,runTask,activeSku,onSkuChange,onSavedSnapshot,materialSkus=[],onLocatePrompt,skuProducts={}}:{skuProducts?:Record<string,string>;onLocatePrompt?:(id:string)=>void;materialSkus?:string[];onSavedSnapshot:(document:import('@/core/projects/project-snapshot').ProjectSnapshotDocument,version:number)=>void;activeSku:string;onSkuChange:(sku:string)=>void;projectId:string;cards:Record<string,CanvasCard>;flush:()=>Promise<void>;runTask:(id:string)=>Promise<boolean>}){
  const t=useTranslations('AppShell.studio.ecommerce');
  const [busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState('');
- const [takes,setTakes]=useState<Record<string,string>>({});
+ const [takes,setTakes]=useState<Record<string,string>>({}),[templateDrafts,setTemplateDrafts]=useState<Record<string,Partial<CompositionTemplate>>>({});
+ // Only SKUs of the same, explicitly named product may share a composition or scenes.
+ const sameProduct=(a:string,b:string)=>!!skuProducts[a]&&skuProducts[a]===skuProducts[b];
  const [selected,setSelected]=useState<string[]>([]),[mainBatch,setMainBatch]=useState<string[]>([]),[progress,setProgress]=useState('');
  const [sceneDraft,setSceneDraft]=useState<{sku:string;id:string;text:string}|null>(null);
  const [stop,setStop]=useState<{requested:boolean;batch:boolean}|null>(null);
@@ -22,7 +24,7 @@ export function EcommerceWorkflowPanel({projectId,cards,flush,runTask,activeSku,
  const adopted=skus.filter(item=>cards[`${item.prefix}-adopted-main`]?.assetId);
  const mainRows=skus.map(item=>({...item,task:item.prefix?cards[`${item.prefix}-main-image`]:undefined})).map(item=>({...item,ready:!!item.task&&item.task.kind==='generation'&&isEcommerceTaskPromptReady(item.task,cards)}));
  const batchIds=mainBatch.filter(id=>mainRows.some(row=>row.ready&&row.task?.id===id));
- async function action(sku:string,action:'workflow'|'adopt'|'master'|'scene',extra:Record<string,string|boolean>={}){
+ async function action(sku:string,action:'workflow'|'adopt'|'master'|'scene'|'template',extra:Record<string,unknown>={}){
   setBusy(true);setError('');setNotice('');
   try{await flush();const saved=await apiJsonPost<{document:import('@/core/projects/project-snapshot').ProjectSnapshotDocument;version:number}>('/api/demo/ecommerce-materials',{projectId,sku,action,...extra});onSavedSnapshot(saved.document,saved.version);setNotice(action==='scene'?t('sceneSaved'):action==='master'?t('masterMarked'):action==='adopt'?t('adoptedNotice'):t('workflowCreated'));return true;}
     catch(cause){setError(cause instanceof Error?cause.message:t('failed'));return false;}finally{setBusy(false);}
@@ -73,7 +75,12 @@ export function EcommerceWorkflowPanel({projectId,cards,flush,runTask,activeSku,
   {currentSku&&<label className="block text-xs">{t('currentWorkflowSku')}<EcommerceSelect className={input} disabled={busy} value={currentSku.sku} onChange={event=>{onSkuChange(event.target.value);setSelected([]);setError('');setNotice('');}}>{skus.map(item=><option key={item.sku} value={item.sku}>{item.sku}</option>)}</EcommerceSelect></label>}
   {skus.filter(item=>item.sku===currentSku?.sku).map(item=>{
    const candidates=Object.values(cards).filter(card=>card.kind==='output'&&card.status==='succeeded'&&card.assetId&&card.sourceConfigCardId===`${item.prefix}-main-image`);
-   const reusable=adopted.filter(other=>other.sku!==item.sku);
+   const reusable=adopted.filter(other=>other.sku!==item.sku&&sameProduct(item.sku,other.sku));
+   const templateCard=cards[`${item.prefix}-composition-template`];
+   const savedTemplate=parseCompositionTemplate(templateCard?.kind==='text'?templateCard.textContent:undefined);
+   const templateDraft={...savedTemplate,...templateDrafts[item.sku]};
+   const templateComplete=isCompleteCompositionTemplate(templateCard?.kind==='text'?templateCard.textContent:undefined);
+   const templateDirty=JSON.stringify(templateDraft)!==JSON.stringify(savedTemplate);
    const applied=cards[`${item.prefix}-master-reference`];
    const appliedSku=skus.find(other=>applied?.referenceCardIds.some(id=>id.startsWith(`${other.prefix}-composition-master-`)))?.sku||'';
    const hasWorkflow=tasks.some(task=>task.id===`${item.prefix}-main-image`);
@@ -83,18 +90,27 @@ export function EcommerceWorkflowPanel({projectId,cards,flush,runTask,activeSku,
    const chosen=candidates.find(card=>card.assetId===choice);
    const alreadyAdopted=!!choice&&pin?.assetId===choice;
    const mainTask=tasks.find(task=>task.id===`${item.prefix}-main-image`);
-   const mainPromptReady=!!mainTask&&isEcommerceTaskPromptReady(mainTask,cards);
+   const templateMissing=!!cards[`${item.prefix}-master-reference`]&&!templateComplete;
+   const mainPromptReady=!!mainTask&&isEcommerceTaskPromptReady(mainTask,cards)&&!templateMissing;
    const sceneTasks=tasks.filter(task=>task.id.includes('-scene-'));
    const completedScenes=sceneTasks.filter(task=>!!task.url).length;
    const ownLabels=sceneSources(item).map(scene=>scene.label);
-   const sceneCopies=skus.filter(other=>other.prefix&&other.sku!==item.sku).map(other=>({sku:other.sku,scenes:sceneSources(other).filter(scene=>!ownLabels.includes(scene.label))})).filter(source=>source.scenes.length>0);
+   const sceneCopies=skus.filter(other=>other.prefix&&other.sku!==item.sku&&sameProduct(item.sku,other.sku)).map(other=>({sku:other.sku,scenes:sceneSources(other).filter(scene=>!ownLabels.includes(scene.label))})).filter(source=>source.scenes.length>0);
    return <section key={item.sku} className="space-y-3">
     <ol aria-label={t('workflowSteps')} className="grid grid-cols-3 gap-1 rounded-lg bg-white/[0.04] p-2 text-[11px]">{[t('stepMain'),t('stepAdopt'),t('stepScenes')].map((label,index)=><li key={label} className={'flex items-center gap-1.5 py-1 '+((index===0&&candidates.length>0)||(index===1&&!!pin?.assetId)||(index===2&&sceneTasks.length>0&&completedScenes===sceneTasks.length)?'text-green-300':'text-[var(--beat-text-3)]')}><span className="flex size-5 shrink-0 items-center justify-center rounded-full border border-current">{index+1}</span>{label}</li>)}</ol>
     {!workflowComplete?<button type="button" disabled={busy} className="min-h-11 w-full rounded-lg border border-white/20 text-xs disabled:opacity-40" onClick={()=>void action(item.sku,'workflow')}>{t(hasWorkflow?'ensureWorkflow':'createWorkflowOnly')}</button>:<p className="text-[11px] text-[var(--beat-text-3)]">✓ {t('workflowReady')}</p>}
     {/* Once a composition is chosen or the main image is adopted, the choice is settled and stays folded. */}
-    {workflowComplete&&<details key={applied||pin?.assetId?'settled':'open'} open={!applied&&!pin?.assetId} aria-label={t('simpleComposition')} className="space-y-2 rounded-lg bg-white/[0.03] px-3">
+    {workflowComplete&&<details key={(applied||pin?.assetId)&&!templateMissing?'settled':'open'} open={(!applied&&!pin?.assetId)||templateMissing} aria-label={t('simpleComposition')} className="space-y-2 rounded-lg bg-white/[0.03] px-3">
      <summary className="flex min-h-10 cursor-pointer items-center justify-between gap-2 text-xs"><h3>{t('simpleComposition')}</h3><span className="max-w-[65%] truncate text-[var(--beat-text-3)]">{applied&&appliedSku?t('compositionReusedShort',{sku:appliedSku}):t('independentShort')} ▾</span></summary>
-     <div className="space-y-2 pb-3">{reusable.length>0?<>
+     <div className="space-y-2 pb-3">
+      <div className="space-y-2 rounded-lg border border-white/10 p-2">
+       <p className="text-xs">{t('templateTitle')}</p>
+       <p className="text-[11px] leading-5 text-[var(--beat-text-3)]">{t(applied?'templateRequiredHint':'templateHint')}</p>
+       {(Object.keys(compositionOptions) as (keyof CompositionTemplate)[]).map(key=><label key={key} className="block text-xs">{t('template_'+key)}<EcommerceSelect className={input} disabled={busy} value={templateDraft[key]||''} onChange={event=>setTemplateDrafts(current=>({...current,[item.sku]:{...templateDraft,[key]:event.target.value}}))}><option value="">{t('templateChoose')}</option>{Object.keys(compositionOptions[key]).map(value=><option key={value} value={value}>{t('template_'+key+'_'+value)}</option>)}</EcommerceSelect></label>)}
+       <button type="button" disabled={busy||Object.keys(templateDraft).length<3||!templateDirty} className="min-h-10 w-full rounded border border-white/20 text-xs disabled:opacity-40" onClick={()=>void action(item.sku,'template',{template:templateDraft}).then(saved=>{if(saved){setTemplateDrafts(current=>{const next={...current};delete next[item.sku];return next;});setNotice(t('templateSaved'));}})}>{t(templateComplete&&!templateDirty?'templateSavedShort':'templateSave')}</button>
+      </div>
+      {!skuProducts[item.sku]&&<p className="text-[11px] leading-5 text-amber-300">{t('needsProductName')}</p>}
+      {reusable.length>0?<>
       <p className="text-[11px] leading-5 text-[var(--beat-text-3)]">{t('reuseCompositionHint')}</p>
       {reusable.map(other=>{const url=cards[`${other.prefix}-adopted-main`]?.url;const current=appliedSku===other.sku&&applied?.assetId===cards[`${other.prefix}-adopted-main`]?.assetId;
        return <button key={other.prefix} type="button" disabled={busy||current} aria-pressed={current} className={'flex min-h-14 w-full items-center gap-3 rounded-lg border p-2 text-left text-xs disabled:cursor-default '+(current?'border-orange-400':'border-white/15 hover:bg-white/5')} onClick={()=>void reuseComposition(item.sku,other)}>{url&&<img src={url} alt={other.sku} className="size-10 shrink-0 rounded bg-white object-contain"/>}<span className="min-w-0 flex-1">{t('reuseCompositionOf',{sku:other.sku})}</span>{current&&<span className="text-green-300">✓</span>}</button>;})}
@@ -107,7 +123,7 @@ export function EcommerceWorkflowPanel({projectId,cards,flush,runTask,activeSku,
       {chosen?.url?<a href={chosen.url} target="_blank" rel="noreferrer" aria-label={t('viewImage')} className="shrink-0"><img src={chosen.url} alt={item.sku+' '+t('mainPreview')} className="size-24 rounded-lg bg-white/5 object-contain"/></a>:<div className="flex size-20 shrink-0 items-center justify-center rounded-lg bg-white/5 text-2xl text-white/20">▧</div>}
       <div className="min-w-0 flex-1 space-y-1"><p className="text-xs text-[var(--beat-text-3)]">1:1 · {candidates.length} {t('resultCount')}</p>
        {mainTask&&<button type="button" disabled={busy||!mainPromptReady} className="min-h-10 rounded-lg border border-white/20 px-3 text-xs hover:bg-white/5 disabled:opacity-40" onClick={()=>void execute([mainTask.id])}>{t(candidates.length?'regenerateOne':'generateOne')}</button>}
-       {!mainPromptReady&&<button type="button" className="min-h-10 text-xs text-orange-400" onClick={()=>onLocatePrompt?.(`${item.prefix}-main-prompt`)}>{t('completePromptAction')} →</button>}
+       {templateMissing?<p className="text-[11px] text-amber-300">{t('templateMissingShort')}</p>:!mainPromptReady&&<button type="button" className="min-h-10 text-xs text-orange-400" onClick={()=>onLocatePrompt?.(`${item.prefix}-main-prompt`)}>{t('completePromptAction')} →</button>}
        {chosen&&!alreadyAdopted&&<button type="button" disabled={busy||!choice} className="min-h-10 rounded-lg bg-[var(--beat-accent)] px-3 text-xs text-black disabled:opacity-40" onClick={()=>void action(item.sku,'adopt',{assetId:choice})}>{t('adoptThisMain')}</button>}
        {alreadyAdopted&&<p className="text-[11px] text-green-300">✓ {t('readyForScenes')}</p>}
       </div>

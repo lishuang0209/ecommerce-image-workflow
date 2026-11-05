@@ -11,7 +11,7 @@ export function EcommerceMaterialLibrary({projectId,materials,onSaved,flush,disa
  const [tab,setTab]=useState<'references'|'results'>('references');
  const [detailId,setDetailId]=useState<string|null>(null),[showProfile,setShowProfile]=useState(false),[showDuplicates,setShowDuplicates]=useState(false);
  const [draft,setDraft]=useState<EcommerceTag|null>(null),[originalTag,setOriginalTag]=useState<EcommerceTag|null>(null);
- const [profile,setProfile]=useState<{sku:string;color:string;preserve:string;expected:{assetId:string;tag:EcommerceTag}[]}|null>(null);
+ const [profile,setProfile]=useState<{sku:string;product:string;color:string;preserve:string;expected:{assetId:string;tag:EcommerceTag}[]}|null>(null);
  const [busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState('');
  const groups=groupEcommerceMaterials(materials);
  const group=groups.find(item=>item.sku===activeSku)||groups[0];
@@ -19,7 +19,7 @@ export function EcommerceMaterialLibrary({projectId,materials,onSaved,flush,disa
  const detail=group?.images.find(item=>item.id===detailId);
  const input='min-h-10 w-full rounded border border-white/15 bg-[var(--beat-surface)] px-2 text-xs';
  function openDetail(item:SavedEcommerceMaterial){setDetailId(item.id);setDraft({...item.tag});setOriginalTag({...item.tag});setError('');}
- function openProfile(){if(!group)return;setShowProfile(true);setProfile({sku:group.sku,color:group.color,preserve:group.preserve,expected:group.images.map(item=>({assetId:item.id,tag:{...item.tag}}))});setError('');}
+ function openProfile(){if(!group)return;setShowProfile(true);setProfile({sku:group.sku,product:group.product||'',color:group.color,preserve:group.preserve,expected:group.images.map(item=>({assetId:item.id,tag:{...item.tag}}))});setError('');}
  async function save(body:Record<string,unknown>){
   setBusy(true);setError('');setNotice('');
   try{await flush();await apiJsonPatch('/api/demo/ecommerce-materials',{projectId,...body});await onSaved();setDetailId(null);setProfile(null);setShowProfile(false);setNotice(t('tagsSaved'));}
@@ -43,9 +43,10 @@ export function EcommerceMaterialLibrary({projectId,materials,onSaved,flush,disa
     </fieldset>}
    </details>
   </div>:<div className="space-y-3">
-   <div className="flex items-center justify-between gap-2 text-xs"><span className="text-[var(--beat-text-3)]">{images.length} {t('photoCount')}{!group.color||!group.preserve?' · '+t('profileIncomplete'):''}</span><button type="button" className="min-h-10 rounded px-2 hover:bg-white/5" disabled={busy||disabled} onClick={openProfile}>{t('productInfo')} ⚙</button></div>
+   <div className="flex items-center justify-between gap-2 text-xs"><span className="text-[var(--beat-text-3)]">{images.length} {t('photoCount')}{!group.product||!group.color||!group.preserve?' · '+t('profileIncomplete'):''}</span><button type="button" className="min-h-10 rounded px-2 hover:bg-white/5" disabled={busy||disabled} onClick={openProfile}>{t('productInfo')} ⚙</button></div>
    {group.conflicting&&<button type="button" disabled={busy||disabled} className="min-h-10 w-full rounded-lg bg-amber-500/10 px-3 text-left text-xs text-amber-300" onClick={openProfile}>{t('profileConflictShort')} →</button>}
    {showProfile&&profile&&<fieldset disabled={busy||disabled} className="space-y-3 rounded-lg border border-white/15 p-3">
+    <label className="block text-xs">{t('productName')}<input className={input} maxLength={100} value={profile.product} placeholder={t('productNamePlaceholder')} onChange={event=>setProfile({...profile,product:event.target.value})}/><span className="mt-1 block text-[11px] text-[var(--beat-text-3)]">{t('productNameHint')}</span></label>
     <label className="block text-xs">{t('color')}<input className={input} maxLength={100} value={profile.color} onChange={event=>setProfile({...profile,color:event.target.value})}/></label>
     <label className="block text-xs">{t('preserve')}<textarea className={input+' py-2'} maxLength={1000} value={profile.preserve} onChange={event=>setProfile({...profile,preserve:event.target.value})}/></label>
     <button type="button" className="min-h-10 rounded bg-[var(--beat-accent)] px-3 text-xs text-black" onClick={()=>void save(profile)}>{t('saveProfile')}</button><button type="button" className="min-h-10 px-3 text-xs" onClick={()=>setShowProfile(false)}>{t('cancelEdit')}</button>

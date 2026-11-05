@@ -1,6 +1,7 @@
 import { z } from 'zod';
 export const ecommerceTagSchema = z.object({
  sku: z.string().trim().min(1).max(100),
+ product: z.string().trim().max(100).optional(),
  role: z.enum(['product','detail','style']),
  shot: z.enum(['front','detail','scene']).optional(),
  preserve: z.string().trim().max(1000).optional(),
@@ -22,7 +23,7 @@ export function sceneDescriptionForTask(taskId:string,cards:Record<string,{textC
 }
 export function preservationPrompt(tags: (EcommerceTag|null)[]) {
  return [...new Set(tags.filter((tag): tag is EcommerceTag=>!!tag&&tag.role!=='style').map(tag=>[
-  `SKU：${tag.sku}`, tag.color?`确认颜色：${tag.color}`:'', tag.preserve?`必须保留：${tag.preserve}`:'',
+  tag.product?`商品：${tag.product}`:'', `SKU：${tag.sku}`, tag.color?`确认颜色：${tag.color}`:'', tag.preserve?`必须保留：${tag.preserve}`:'',
  ].filter(Boolean).join('；')))].join('\n');
 }
 /**
@@ -92,3 +93,42 @@ export function isEcommerceTaskPromptReady(card:{id:string;referenceCardIds:stri
  if(text?.kind!=='text'||!card.referenceCardIds.includes(id)||!text.textContent?.trim()||text.textContent.trim()===pendingEcommercePrompt)return false;
  try{assertSkuTextContext(match[1],text.referenceCardIds);return true;}catch{return false;}
 }
+
+/** Product (family) a SKU belongs to; only SKUs of the same non-empty product may share a composition or scenes. */
+export function productOfSku(sku:string,tags:(EcommerceTag|null)[]){
+ return tags.find(tag=>tag?.sku===sku&&tag.role!=='style'&&tag.product?.trim())?.product?.trim()||'';
+}
+export function assertSameProduct(sku:string,otherSku:string,tags:(EcommerceTag|null)[]){
+ const own=productOfSku(sku,tags),other=productOfSku(otherSku,tags);
+ if(!own||!other)throw new Error('Set the same product name for both SKUs before reusing between them.');
+ if(own!==other)throw new Error('These SKUs belong to different products and cannot share a composition or scenes.');
+}
+
+export const compositionOptions = {
+ count: { single: '单件商品（只出现一件，例如单只鞋）', pair: '一对商品（例如一双鞋，两只并排）' },
+ facing: { left: '侧面，商品前端朝左', right: '侧面，商品前端朝右', front: '正面朝向镜头', threeQuarter: '四分之三侧面，前端朝左前方' },
+ scale: { small: '小，主体约占画面宽度 45%', medium: '中，主体约占画面宽度 60%', large: '大，主体约占画面宽度 75%' },
+} as const;
+export type CompositionTemplate = { count: keyof typeof compositionOptions.count; facing: keyof typeof compositionOptions.facing; scale: keyof typeof compositionOptions.scale };
+export const compositionTemplateSchema = z.object({
+ count: z.enum(['single','pair']), facing: z.enum(['left','right','front','threeQuarter']), scale: z.enum(['small','medium','large']),
+}).strict();
+const templateLines = { count: '数量：', facing: '朝向：', scale: '主体大小：' } as const;
+/** The template is a plain text node connected to the main image, so the connection itself is the model input. */
+export function compositionTemplateText(template: CompositionTemplate) {
+ return ['构图模板（硬性要求，优先于参考图的姿态）：',
+  templateLines.count + compositionOptions.count[template.count],
+  templateLines.facing + compositionOptions.facing[template.facing],
+  templateLines.scale + compositionOptions.scale[template.scale],
+  '主体居中，禁止镜像翻转，禁止改变数量。'].join('\n');
+}
+export function parseCompositionTemplate(text: string | undefined): Partial<CompositionTemplate> {
+ const result: Partial<CompositionTemplate> = {};
+ for (const key of Object.keys(templateLines) as (keyof CompositionTemplate)[]) {
+  const line = text?.split('\n').find(value => value.startsWith(templateLines[key]))?.slice(templateLines[key].length).trim();
+  const found = Object.entries(compositionOptions[key]).find(([, label]) => label === line)?.[0];
+  if (found) (result as Record<string, string>)[key] = found;
+ }
+ return result;
+}
+export const isCompleteCompositionTemplate = (text: string | undefined) => Object.keys(parseCompositionTemplate(text)).length === 3;

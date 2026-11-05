@@ -17,9 +17,9 @@ test('SKU workflow persists explicit adoption and composition-only master withou
  const {persistBeatDesignCommand}=await import('@/core/commands/persist');
  const project=await createCreativeCanvas({name:'Isolated workflow fixture',template:'ecommerce',locale:'en'});
  const black='Black',white='White',bp=skuNodePrefix(black),wp=skuNodePrefix(white);
- async function asset(sku:string,generated=false){
+ async function asset(sku:string,generated=false,product:string|null='Thermos bottle'){
   const id=randomUUID();
-  await recordUserAsset({id,type:'image',source:generated?'provider':'upload',bucket:'local-project-assets',objectKey:id,publicUrl:`/media/${id}.png`,originProjectId:project.id,metadata:{ecommerce:{sku,role:'product',shot:'front',preserve:'Logo'},...(generated?{sourceCardId:`${skuNodePrefix(sku)}-main-image`,ecommerceOutput:{task:'main'}}:{})}});
+  await recordUserAsset({id,type:'image',source:generated?'provider':'upload',bucket:'local-project-assets',objectKey:id,publicUrl:`/media/${id}.png`,originProjectId:project.id,metadata:{ecommerce:{sku,...(product?{product}:{}),role:'product',shot:'front',preserve:'Logo'},...(generated?{sourceCardId:`${skuNodePrefix(sku)}-main-image`,ecommerceOutput:{task:'main'}}:{})}});
   await linkProjectAsset({projectId:project.id,assetId:id,role:generated?'generated':'upload'});return id;
  }
  const raw=await asset(black);const whiteRaw=await asset(white);
@@ -51,7 +51,23 @@ test('SKU workflow persists explicit adoption and composition-only master withou
  for(const scene of state.snapshot.cards.filter(card=>card.kind==='generation'&&card.id.startsWith(bp+'-scene-'))){assert.ok(scene.referenceCardIds.includes(bp+'-adopted-main'));assert.ok(!scene.referenceCardIds.includes('sku-asset-'+raw));}
  const id=randomUUID();
  const result=await persistBeatDesignCommand({projectId:project.id,origin:'ui',commandId:id,idempotencyKey:id,expectedRevision:state.snapshotVersion,command:{type:'canvas.apply',operations:[{type:'upsert_text',cardId:bp+'-facts',textContent:'User facts remain authoritative.'},{type:'upsert_card',card:{...state.snapshot.cards.find(card=>card.id===bp+'-main-image')!,prompt:'Revised main settings'}}]}});assert.ok(result.ok);
+ const template={count:'single',facing:'left',scale:'medium'} as const;
+ await bind(black,{action:'template',template});
+ const blackTemplate=(await snapshot()).snapshot.cards.find(card=>card.id===bp+'-composition-template');
+ assert.equal(blackTemplate?.kind,'text');
+ assert.ok((await snapshot()).snapshot.cards.find(card=>card.id===bp+'-main-image')?.referenceCardIds.includes(bp+'-composition-template'));
  await bind(black);await bind(black,{action:'workflow'});await bind(white,{action:'workflow',masterSku:black});
+ // Reusing a composition carries the master SKU's template along with the master image.
+ const copied=(await snapshot()).snapshot.cards.find(card=>card.id===wp+'-composition-template');
+ assert.equal(copied?.kind==='text'&&copied.textContent,blackTemplate?.kind==='text'&&blackTemplate.textContent);
+ assert.ok((await snapshot()).snapshot.cards.find(card=>card.id===wp+'-main-image')?.referenceCardIds.includes(wp+'-composition-template'));
+ // A different product, or a SKU without a product name, can never borrow this composition or its scenes.
+ const other='Lipstick',bare='Unnamed';
+ await asset(other,false,'Lipstick');await asset(bare,false,null);
+ await bind(other);await bind(other,{action:'workflow'});await bind(bare);await bind(bare,{action:'workflow'});
+ await assert.rejects(()=>bind(other,{action:'workflow',masterSku:black}),/different products/);
+ await assert.rejects(()=>bind(bare,{action:'workflow',masterSku:black}),/same product name/);
+ await assert.rejects(()=>bind(other,{action:'scene',sceneDescription:'城市街头',copyPromptFrom:bp+'-scene-abcdef0123456789-prompt'}),/different products/);
  await bind(white,{action:'scene',taskId:wp+'-scene-1111222233334444-image',sceneDescription:'浅色摄影台'});
  await bind(white,{action:'scene',taskId:wp+'-scene-aaaabbbbccccdddd-image',sceneDescription:'节日礼盒旁'});
  state=await snapshot();
@@ -59,7 +75,8 @@ test('SKU workflow persists explicit adoption and composition-only master withou
  assert.equal(state.snapshot.cards.find(card=>card.id===bp+'-adopted-main')?.assetId,main);
  assert.equal(state.snapshot.cards.find(card=>card.id===wp+'-master-reference')?.assetId,main);
  assert.ok(state.snapshot.cards.find(card=>card.id===wp+'-main-image')?.referenceCardIds.includes(wp+'-master-reference'));
- assert.equal(state.snapshot.cards.filter(card=>card.kind==='generation').length,6);
+ // Two black scenes + two white scenes + four main images (the two extra product-check SKUs included).
+ assert.equal(state.snapshot.cards.filter(card=>card.kind==='generation').length,8);
  // Marking a new master must not change an already applied concrete reference.
  const nextMain=await asset(black,true);
  await bind(black,{action:'adopt',assetId:nextMain});
