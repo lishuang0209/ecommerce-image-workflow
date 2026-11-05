@@ -14,7 +14,7 @@ export function EcommerceResizePanel({ projectId, cards }: { projectId: string; 
   const [targets, setTargets] = useState<string[]>(['3:4']);
   const [mode, setMode] = useState<'auto' | 'crop' | 'pad'>('auto');
   const [busy, setBusy] = useState(false), [error, setError] = useState(''), [notice, setNotice] = useState('');
-  const [derived, setDerived] = useState<Derived[]>([]);
+  const [derived, setDerived] = useState<Derived[]>([]), [zipping, setZipping] = useState(false);
   const sources = useMemo(() => {
     const rows: { assetId: string; url: string; label: string }[] = [];
     for (const card of Object.values(cards)) {
@@ -41,6 +41,32 @@ export function EcommerceResizePanel({ projectId, cards }: { projectId: string; 
       await reload();
     } catch (cause) { setError(cause instanceof Error ? cause.message : t('failed')); } finally { setBusy(false); }
   }
+  const labelOf = (assetId: string, fallback: string) => (sources.find(row => row.assetId === assetId)?.label || fallback).replace(/^.* · /, '');
+  const groups = useMemo(() => {
+    const bySku = new Map<string, Map<string, { label: string; sizes: Derived[] }>>();
+    for (const item of derived) {
+      const label = labelOf(item.sourceAssetId, item.task === 'main' ? t('mainTaskTitle') : item.filename);
+      const key = item.sourceAssetId, skus = bySku.get(item.sku) ?? new Map();
+      const entry = skus.get(key) ?? { label, sizes: [] };
+      entry.sizes.push(item); skus.set(key, entry); bySku.set(item.sku, skus);
+    }
+    return [...bySku].map(([sku, items]) => ({ sku, items: [...items.values()].map(entry => ({ ...entry, sizes: entry.sizes.sort((a, b) => a.ratio.localeCompare(b.ratio)) })) }));
+  }, [derived, sources]);
+  const zipName = (sku: string, label: string, size: Derived) => `${sku}_${label}_${size.ratio.replace(':', 'x')}.png`.replace(/[\\/:*?"<>|]/g, '-');
+  async function downloadAll() {
+    setZipping(true); setError('');
+    try {
+      const { default: JSZip } = await import('jszip');
+      const zip = new JSZip();
+      for (const group of groups) for (const item of group.items) for (const size of item.sizes) {
+        const response = await fetch(size.url);
+        if (!response.ok) throw new Error(t('failed'));
+        zip.folder(group.sku.replace(/[\\/:*?"<>|]/g, '-'))!.file(zipName(group.sku, item.label, size).slice(group.sku.length + 1), await response.blob());
+      }
+      const url = URL.createObjectURL(await zip.generateAsync({ type: 'blob' }));
+      const link = document.createElement('a'); link.href = url; link.download = 'resized-images.zip'; link.click(); URL.revokeObjectURL(url);
+    } catch (cause) { setError(cause instanceof Error ? cause.message : t('failed')); } finally { setZipping(false); }
+  }
   if (!sources.length) return null;
   const toggle = (list: string[], value: string, on: boolean) => on ? [...new Set([...list, value])] : list.filter(item => item !== value);
   return <section aria-label={t('resizeTitle')} className="space-y-3 rounded-xl border border-white/10 bg-white/[0.02] p-3">
@@ -57,11 +83,16 @@ export function EcommerceResizePanel({ projectId, cards }: { projectId: string; 
     <button type="button" disabled={busy || !valid.length || !targets.length} className="min-h-10 w-full rounded-lg bg-[var(--beat-accent)] px-3 text-xs text-black disabled:opacity-40" onClick={() => void run()}>{busy ? t('taskRunningShort') : t('resizeRun') + ' · ' + valid.length * targets.length}</button>
     {notice && <p role="status" className="text-xs text-green-300">{notice}</p>}
     {error && <p role="alert" className="text-xs text-red-300">{error}</p>}
-    {derived.length > 0 && <details className="text-xs"><summary className="min-h-10 cursor-pointer py-2 text-[var(--beat-text-3)]">{t('resizeResults')} · {derived.length} ▾</summary>
-      <div className="grid grid-cols-3 gap-2">{derived.map(item => <figure key={item.id} className="space-y-1">
-        <a href={item.url} target="_blank" rel="noreferrer"><img src={item.url} alt={item.filename} className="aspect-square w-full rounded bg-white/5 object-contain" /></a>
-        <figcaption className="truncate text-[11px] text-[var(--beat-text-3)]" title={item.filename}>{item.sku} · {item.ratio}</figcaption>
-        <a href={item.url} download={item.filename} className="block text-[11px] text-orange-400">{t('resizeDownload')}</a>
-      </figure>)}</div></details>}
+    {derived.length > 0 && <div className="space-y-3 border-t border-white/10 pt-3">
+      <div className="flex items-center justify-between text-xs"><h4>{t('resizeResults')} · {derived.length}</h4>
+        <button type="button" disabled={busy || zipping} className="min-h-9 text-orange-400 disabled:opacity-40" onClick={() => void downloadAll()}>{zipping ? t('taskRunningShort') : t('resizeDownloadAll')}</button></div>
+      {groups.map(group => <div key={group.sku} className="space-y-2"><p className="text-xs">{group.sku}</p>
+        {group.items.map(item => <div key={item.sizes[0].sourceAssetId} className="space-y-1"><p className="truncate text-[11px] text-[var(--beat-text-3)]">{item.label}</p>
+          <div className="grid grid-cols-3 gap-2">{item.sizes.map(size => <figure key={size.id} className="space-y-1">
+            <a href={size.url} target="_blank" rel="noreferrer"><img src={size.url} alt={item.label + ' ' + size.ratio} className="aspect-square w-full rounded bg-white/5 object-contain" /></a>
+            <figcaption className="flex items-center justify-between text-[11px]"><span className="text-[var(--beat-text-3)]">{size.ratio}</span><a href={size.url} download={zipName(group.sku, item.label, size)} className="text-orange-400">{t('resizeDownload')}</a></figcaption>
+          </figure>)}</div></div>)}
+      </div>)}
+    </div>}
   </section>;
 }

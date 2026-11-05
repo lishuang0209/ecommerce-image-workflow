@@ -677,6 +677,7 @@
         "resizeDone": "Processed {total}; {created} new, the rest already existed.",
         "resizeResults": "Resized results",
         "resizeDownload": "Download",
+        "resizeDownloadAll": "Download all (zip)",
         "copyScenesFrom": "Reuse scenes from \"{sku}\" ({count})",
         "scenesCopied": "Added {count} scenes. The product comes from this SKU's adopted main image; edit the prompts on the canvas.",
         "reuseCompositionHint": "For the same product in another color, reuse an adopted main image's angle, placement and size; color and details still come from this SKU's photos. Compare after generating.",

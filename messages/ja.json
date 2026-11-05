@@ -677,6 +677,7 @@
         "resizeDone": "{total} 件を処理しました（新規 {created} 件、残りは既存）。",
         "resizeResults": "サイズ変更の結果",
         "resizeDownload": "ダウンロード",
+        "resizeDownloadAll": "すべてダウンロード（zip）",
         "copyScenesFrom": "「{sku}」のシーンを使う（{count} 件）",
         "scenesCopied": "{count} 件のシーンを追加しました。商品はこの SKU の採用済みメイン画像に従います。プロンプトはキャンバスで編集できます。",
         "reuseCompositionHint": "同じ商品の色違いなら、採用済みメイン画像の角度・配置・サイズをそのまま使えます。色とディテールは現在の SKU の写真に従います。生成後に比較してください。",

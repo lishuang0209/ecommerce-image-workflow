@@ -677,6 +677,7 @@
         "resizeDone": "已处理 {total} 项，其中新生成 {created} 张，其余已存在。",
         "resizeResults": "尺寸结果",
         "resizeDownload": "下载",
+        "resizeDownloadAll": "全部下载（zip）",
         "copyScenesFrom": "沿用「{sku}」的场景（{count} 个）",
         "scenesCopied": "已添加 {count} 个场景。商品以本 SKU 已采用的主图为准，提示词可在画布上修改。",
         "reuseCompositionHint": "同款不同颜色时，可直接沿用已采用主图的角度、摆放和大小；颜色与细节仍以当前 SKU 的实拍为准。生成后请对比确认。",
