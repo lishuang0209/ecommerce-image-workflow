@@ -3,7 +3,7 @@ import test from 'node:test';
 import {buildTextCard} from '@/core/beatcanvas/text-nodes';
 import type {CanvasCard} from '@/core/beatcanvas/canvas-types';
 import type {BeatCanvasFlowNode,BeatCanvasFlowEdge} from './beatcanvas-react-flow-types';
-import {deduplicateResultNodes} from './deduplicate-result-nodes';
+import {deduplicateResultNodes,foldedCardsToDelete} from './deduplicate-result-nodes';
 
 test('all historical take placements fold without changing pinned assets or inputs',()=>{
  const cards={
@@ -31,4 +31,21 @@ test('all historical take placements fold without changing pinned assets or inpu
  // Changing the displayed take cannot bring standalone history cards back.
  nodes[0].data.props={w:100,h:100,cardMediaType:'image',label:'Main',status:'succeeded',latestOutputUrl:'/old'};
  assert.deepEqual(deduplicateResultNodes(nodes,edges,cards).nodes.map(node=>node.id),['gen']);
+});
+
+test('deleting a host also deletes its folded cards, but keeps another SKU reusing that composition',()=>{
+ const white='sku-aaaa',black='sku-bbbb';
+ const image=(id:string,assetId:string)=>({...buildTextCard({id,name:id}),kind:'asset',type:'image',assetId,url:'/'+assetId});
+ const cards={
+  [white+'-main-image']:{...buildTextCard({id:white+'-main-image',name:'White'}),kind:'generation',type:'image'},
+  out:{...buildTextCard({id:'out',name:'Out'}),kind:'output',type:'image',status:'succeeded',assetId:'w',url:'/w',sourceConfigCardId:white+'-main-image'},
+  'result:out':image('result:out','w'),
+  [white+'-adopted-main']:image(white+'-adopted-main','w'),
+  [white+'-composition-master']:image(white+'-composition-master','w'),
+  [black+'-main-image']:{...buildTextCard({id:black+'-main-image',name:'Black'}),kind:'generation',type:'image'},
+  [black+'-master-reference']:image(black+'-master-reference','w'),
+ } as Record<string,CanvasCard>;
+ const nodes=Object.keys(cards).map(id=>({id}));
+ assert.deepEqual(foldedCardsToDelete(new Set([white+'-main-image']),nodes,cards).sort(),['out','result:out',white+'-adopted-main',white+'-composition-master'].sort());
+ assert.ok(foldedCardsToDelete(new Set([white+'-main-image',black+'-main-image']),nodes,cards).includes(black+'-master-reference'));
 });

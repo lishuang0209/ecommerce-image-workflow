@@ -3,9 +3,10 @@ import type {BeatCanvasFlowNode,BeatCanvasFlowEdge} from './beatcanvas-react-flo
 
 /** All take placements fold into their source node, independent of selected version.
  * Presentation only: never removes persisted cards or rewrites asset references. */
-export function deduplicateResultNodes(nodes:BeatCanvasFlowNode[],edges:BeatCanvasFlowEdge[],cards:Record<string,CanvasCard>|undefined){
- if(!cards)return {nodes,edges};
+/** Maps each folded card id to the visible node it is drawn inside. */
+export function foldedResultAliases(nodes:{id:string}[],cards:Record<string,CanvasCard>|undefined){
  const aliases=new Map<string,string>();
+ if(!cards)return aliases;
  const shown=new Map<string,string>();
  for(const node of nodes){
   const card=cards[node.id];
@@ -23,6 +24,24 @@ export function deduplicateResultNodes(nodes:BeatCanvasFlowNode[],edges:BeatCanv
    if(target)aliases.set(card.id,target);
   }
  }
+ return aliases;
+}
+
+/** Folded cards are invisible, so deleting their host must delete them too, or they resurface.
+ * A SKU's folded cards only go when that SKU's own nodes are deleted, so another SKU's reuse survives. */
+export function foldedCardsToDelete(deleting:Set<string>,nodes:{id:string}[],cards:Record<string,CanvasCard>|undefined){
+ const extra:string[]=[];
+ for(const [id,target]of foldedResultAliases(nodes,cards)){
+  if(deleting.has(id))continue;
+  const sku=/^(sku-[0-9a-f]+)-/.exec(id)?.[1];
+  if(sku?(deleting.has(`${sku}-main-image`)||(deleting.has(target)&&target.startsWith(sku+'-'))):deleting.has(target))extra.push(id);
+ }
+ return extra;
+}
+
+export function deduplicateResultNodes(nodes:BeatCanvasFlowNode[],edges:BeatCanvasFlowEdge[],cards:Record<string,CanvasCard>|undefined){
+ if(!cards)return {nodes,edges};
+ const aliases=foldedResultAliases(nodes,cards);
  const seen=new Set<string>();
  return {nodes:nodes.filter(node=>!aliases.has(node.id)),edges:edges.flatMap(edge=>{
   const source=aliases.get(edge.source)||edge.source,target=aliases.get(edge.target)||edge.target;

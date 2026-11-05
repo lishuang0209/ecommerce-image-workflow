@@ -1,4 +1,4 @@
-import {deduplicateResultNodes} from './deduplicate-result-nodes';
+import {deduplicateResultNodes,foldedCardsToDelete} from './deduplicate-result-nodes';
 import {
   Background,
   BackgroundVariant,
@@ -525,6 +525,8 @@ function BeatCanvasReactFlowCanvas({
           groupIds.map((groupId) => ({ type: 'remove_group', groupId }))
         );
       const pending = new Set(shapeIds.filter((id) => !groupIds.includes(id)));
+      for (const id of foldedCardsToDelete(pending, nodesRef.current, cardsRef.current))
+        pending.add(id);
       let changed = true;
       while (changed) {
         changed = false;
@@ -986,6 +988,9 @@ function BeatCanvasReactFlowCanvas({
           .map((change) => change.id)
       );
       const removedIds = new Set(directlyRemovedIds);
+      if (removedIds.size)
+        for (const id of foldedCardsToDelete(removedIds, nodesRef.current, cardsRef.current))
+          removedIds.add(id);
       let foundDescendant = true;
       while (foundDescendant) {
         foundDescendant = false;
