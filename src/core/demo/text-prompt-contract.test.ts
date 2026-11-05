@@ -21,3 +21,11 @@ test('text requests distinguish untrusted product information and role instructi
  assert.equal(input.task, '白底主图');
  assert.equal(input.productInformationAndRequirements, '主图和场景图都要，偏户外');
 });
+
+test('a composition template replaces the drafted composition on main images only', () => {
+ const draft = promptDraftSchema.parse({ product: '白色运动鞋', composition: '单只鞋，侧面展示', scene: '' });
+ const main = renderProductPrompt(draft, 'main', '1:1', { template: true });
+ assert.match(main, /构图：严格按「构图模板」执行/);
+ assert.doesNotMatch(main, /单只鞋，侧面展示/);
+ assert.match(renderProductPrompt(draft, 'scene', '4:5', { template: true }), /构图：单只鞋，侧面展示/);
+});

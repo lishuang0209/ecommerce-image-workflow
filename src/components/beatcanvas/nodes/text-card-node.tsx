@@ -108,8 +108,8 @@ export function TextCardNode({
           }
           className="nodrag nopan nowheel min-h-0 flex-1 resize-none bg-transparent p-4 text-sm leading-relaxed text-[var(--beat-text-1)] outline-none placeholder:text-[var(--beat-text-3)] focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-[var(--beat-graph)]"
         />
-        {/* Legacy "-brief" scene notes are plain input; only the prompt node itself offers paid AI drafting. */}
-        {id !== 'product-information' && id !== 'ecommerce-start' && !id.endsWith('-facts') && !id.endsWith('-brief') && <div className="nodrag nopan nowheel shrink-0 space-y-2 border-t border-white/10 px-3 py-2 text-xs">
+        {/* Legacy "-brief" scene notes and composition templates are plain input; only the prompt node itself offers paid AI drafting. */}
+        {id !== 'product-information' && id !== 'ecommerce-start' && !id.endsWith('-facts') && !id.endsWith('-brief') && !id.endsWith('-composition-template') && <div className="nodrag nopan nowheel shrink-0 space-y-2 border-t border-white/10 px-3 py-2 text-xs">
           <div className="flex items-center gap-2">
             {ecommercePromptPattern.test(id)
               ? <span className="min-w-0 flex-1 truncate text-[var(--beat-text-3)]">{t(task === 'main' ? 'mainPrompt' : 'scenePrompt')}</span>

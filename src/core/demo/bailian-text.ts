@@ -47,7 +47,7 @@ export async function draftCanvasProductPrompt(input: { projectId: string; cardI
     const choice = json.choices?.[0];
     if (choice?.finish_reason !== 'stop' || typeof choice.message?.content !== 'string') throw new Error('Text generation did not finish. Original node was preserved.');
     const draft = promptDraftSchema.parse(JSON.parse(choice.message.content));
-    const prompt = renderProductPrompt(draft, task, ratio);
+    const prompt = renderProductPrompt(draft, task, ratio, { template: !!skuPrompt && consumers.some(item => item.referenceCardIds.includes(`${skuPrompt[1]}-composition-template`)) });
     const id = randomUUID();
     const directory = resolve(getBeatDesignDataRoot(), 'bailian-text-runs');
     await mkdir(directory, { recursive: true, mode: 0o700 });

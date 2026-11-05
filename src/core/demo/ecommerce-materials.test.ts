@@ -54,6 +54,11 @@ test('SKU workflow persists explicit adoption and composition-only master withou
  const template={count:'single',facing:'left',scale:'medium'} as const;
  await bind(black,{action:'template',template});
  const blackTemplate=(await snapshot()).snapshot.cards.find(card=>card.id===bp+'-composition-template');
+ const laid=(await snapshot()).snapshot.frames;
+ // The template sits directly below the facts card, in the same column, without overlapping it.
+ assert.equal(laid[bp+'-composition-template']?.x,laid[bp+'-facts']?.x);
+ assert.ok(laid[bp+'-composition-template']!.y>=laid[bp+'-facts']!.y+laid[bp+'-facts']!.h);
+ assert.ok(!/型号与容量/.test(String((await snapshot()).snapshot.cards.find(card=>card.id===bp+'-facts')?.kind==='text'&&(await snapshot()).snapshot.cards.find(card=>card.id===bp+'-facts')!.textContent)));
  assert.equal(blackTemplate?.kind,'text');
  assert.ok((await snapshot()).snapshot.cards.find(card=>card.id===bp+'-main-image')?.referenceCardIds.includes(bp+'-composition-template'));
  await bind(black);await bind(black,{action:'workflow'});await bind(white,{action:'workflow',masterSku:black});

@@ -1,3 +1,4 @@
+import {templateCompositionLine} from './text-prompt-contract';
 import { createHash, randomUUID } from 'node:crypto';
 import { and, eq } from 'drizzle-orm';
 import { getDb } from '@/core/workspace-lib/db-adapter';
@@ -20,6 +21,10 @@ function copiedScenePrompt(cards:Map<string,CanvasCard>,assets:{metadata:unknown
  if(!text||text===pendingEcommercePrompt||!from||!to||!text.includes(from))return null;
  return text.split(from).join(to);
 }
+/** Directly under the SKU facts card, in the same column. */
+const legacyFactsLines=/\n?商品名称、型号与容量：请核对后填写，未确认的规格不应补写。|\n?素材标签会在生成时自动读取；请在此补充其他商品事实。/g;
+export const templateFrame=(y:number)=>({x:-40,y:y+440,w:400,h:300});
+
 export async function bindEcommerceMaterials({projectId,sku,action='import',assetId,masterSku,masterAssetId,clearMaster,sceneDescription,taskId,copyPromptFrom,template}: {
  projectId:string;sku:string;action?:'import'|'workflow'|'adopt'|'master'|'scene'|'template';template?:CompositionTemplate;assetId?:string;masterSku?:string;masterAssetId?:string;clearMaster?:boolean;sceneDescription?:string;taskId?:string;copyPromptFrom?:string;
 }):Promise<{sku:string;assets:number;hasProduct:boolean;taskIds:string[]}> {
@@ -52,7 +57,7 @@ export async function bindEcommerceMaterials({projectId,sku,action='import',asse
    const id=`sku-asset-${asset.id}`,tag=ecommerceTag(asset.metadata)!;
    if(!cards.has(id))operations.push({type:'upsert_card',card:{...buildTextCard({id,name:`${sku} · ${tag.shot||tag.role} · ${asset.filename||asset.id}`}),kind:'asset',type:'image',assetId:asset.id,url:asset.publicUrl,status:'succeeded'},frame:{x:-740-index%2*330,y:y+Math.floor(index/2)*290,w:300,h:260}});
   }
-  if(!cards.has(factsId))operations.push({type:'upsert_text',cardId:factsId,name:`${sku} · 商品信息`,textContent:`${preservationPrompt(assets.map(asset=>ecommerceTag(asset.metadata)))}\n商品名称、型号与容量：请核对后填写，未确认的规格不应补写。\n素材标签会在生成时自动读取；请在此补充其他商品事实。`,frame:{x:-40,y,w:400,h:400}});
+  if(!cards.has(factsId))operations.push({type:'upsert_text',cardId:factsId,name:`${sku} · 商品信息`,textContent:preservationPrompt(assets.map(asset=>ecommerceTag(asset.metadata))),frame:{x:-40,y,w:400,h:400}});
  }else if(action==='scene'){
   if(copyPromptFrom){
    const sourceSku=photoTags.find(tag=>tag&&skuNodePrefix(tag.sku)===copyPromptFrom.replace(/-scene-.*$/,''))?.sku;
@@ -147,8 +152,27 @@ export async function bindEcommerceMaterials({projectId,sku,action='import',asse
  }
  function templateOperations(text:string):CanvasOperation[]{
   const main=cards.get(`${prefix}-main-image`);
-  return [{type:'upsert_text',cardId:templateId,name:`${sku} · 构图模板`,textContent:text,frame:state!.snapshot.frames[templateId]??{x:-40,y:y-300,w:400,h:240}},
-   ...(main?.kind==='generation'&&!main.referenceCardIds.includes(templateId)?[{type:'set_references',cardId:main.id,referenceCardIds:[...main.referenceCardIds,templateId]} as CanvasOperation]:[])];
+  return [{type:'upsert_text',cardId:templateId,name:`${sku} · 构图模板`,textContent:text,frame:templatePosition()},
+   ...(main?.kind==='generation'&&!main.referenceCardIds.includes(templateId)?[{type:'set_references',cardId:main.id,referenceCardIds:[...main.referenceCardIds,templateId]} as CanvasOperation]:[]),
+   ...singleCompositionLine()];
+ }
+ function templatePosition(){
+  const frame=state!.snapshot.frames[templateId];
+  // The first release placed the template above the facts card, where it overlapped neighbours.
+  return !frame||(frame.x===-40&&frame.y===y-300&&frame.h===240)?templateFrame(y):frame;
+ }
+ /** With a template the main prompt keeps one composition line that defers to it, so the two never conflict. */
+ function singleCompositionLine():CanvasOperation[]{
+  const promptId=`${prefix}-main-prompt`,card=cards.get(promptId);
+  if(card?.kind!=='text'||!card.textContent||!/^构图：/m.test(card.textContent)||card.textContent.includes(templateCompositionLine))return [];
+  return [{type:'upsert_text',cardId:promptId,name:card.name,textContent:card.textContent.replace(/^构图：.*$/m,templateCompositionLine),frame:state!.snapshot.frames[promptId]}];
+ }
+ const facts=cards.get(factsId);
+ if(facts?.kind==='text'&&facts.textContent&&legacyFactsLines.test(facts.textContent))operations.push({type:'upsert_text',cardId:factsId,name:facts.name,textContent:facts.textContent.replace(legacyFactsLines,'').trim(),frame:state.snapshot.frames[factsId]});
+ if(action!=='template'&&cards.has(templateId)&&!operations.some(op=>op.type==='upsert_text'&&op.cardId===templateId)){
+  const frame=templatePosition();
+  if(frame!==state.snapshot.frames[templateId])operations.push({type:'move_card',cardId:templateId,frame} as CanvasOperation);
+  operations.push(...singleCompositionLine());
  }
  if(operations.length){const commandId=randomUUID();const result=await persistBeatDesignCommand({projectId,origin:'ui',commandId,idempotencyKey:commandId,expectedRevision:state.snapshotVersion,command:{type:'canvas.apply',operations}});if(!result.ok)throw new Error(result.message);}
  return {sku,assets:assets.length,hasProduct:assets.some(asset=>ecommerceTag(asset.metadata)?.role==='product'),taskIds:action==='workflow'?['main'].map(task=>`${prefix}-${task}-image`):[]};

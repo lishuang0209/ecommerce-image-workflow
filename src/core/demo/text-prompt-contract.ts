@@ -8,14 +8,18 @@ export const promptDraftSchema = z.object({
   scene: z.string().trim().max(1200),
 }).strict();
 
-export function renderProductPrompt(draft: z.infer<typeof promptDraftSchema>, task: PromptTask, ratio: string) {
+export const templateCompositionLine = '构图：严格按「构图模板」执行（数量、朝向、主体大小），主体居中，四周留白。';
+
+export function renderProductPrompt(draft: z.infer<typeof promptDraftSchema>, task: PromptTask, ratio: string, options: { template?: boolean } = {}) {
   const identity = `商品身份与保真要求：${draft.product}。以实际连接的商品参考图为准，保持同一 SKU 的颜色、外形比例、Logo、已有文字与部件结构，不添加未经确认的功能、卖点、标签或文字。`;
   const image = task === 'main'
     ? '任务：白底电商主图。必须使用纯白色背景和柔和影棚光，仅展示完整商品及轻微接触阴影。不得使用户外、树林、木桌、室内场景或其他道具；通用创作要求中的场景风格不适用于本任务。'
     : `任务：生活场景图。环境与光线：${draft.scene || '简洁自然的生活环境，商品为视觉主体'}。道具和环境不得遮挡或改变商品。`;
   // Background instructions cannot leak through the shared composition field.
   if (task === 'main' && /户外|树林|森林|木桌|自然光|outdoor|forest|wooden|natural light/i.test(draft.composition)) throw new Error('Text model returned a scene composition for a white-background task. Please revise the requirements.');
-  return `${image}\n${identity}\n构图：${draft.composition}。\n输出画幅：${ratio}。真实商业产品摄影，禁止额外文字和水印。`;
+  // A composition template is the single source of pose rules; the drafted composition would compete with it.
+  const composition = task === 'main' && options.template ? templateCompositionLine : `构图：${draft.composition}。`;
+  return `${image}\n${identity}\n${composition}\n输出画幅：${ratio}。真实商业产品摄影，禁止额外文字和水印。`;
 }
 
 export function productPromptMessages(input: { task: PromptTask; brief: string; name: string; ratio: string }) {
