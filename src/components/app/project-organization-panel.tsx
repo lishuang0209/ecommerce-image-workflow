@@ -327,13 +327,13 @@ export function ProjectOrganizationPanel({
       {tab === 'folders' ? (
         <>
           <form
-            className="flex flex-wrap items-end gap-2"
+            className="flex flex-wrap items-end gap-x-8 gap-y-3"
             onSubmit={(event) => {
               event.preventDefault();
               void search({ folderId, scope, query });
             }}
           >
-            <label className="grid w-full gap-1 text-xs sm:w-56">
+            <label className="grid w-56 max-w-full shrink-0 gap-1 text-xs">
               {t('browse')}
               <select
                 aria-label={t('browse')}
@@ -366,7 +366,7 @@ export function ProjectOrganizationPanel({
                 ))}
               </select>
             </label>
-            <label className="grid min-w-44 flex-1 gap-1 text-xs">
+            <label className="grid w-72 max-w-full shrink-0 gap-1 text-xs">
               {t('search')}
               <input
                 className={control}
@@ -379,7 +379,7 @@ export function ProjectOrganizationPanel({
             </button>
           </form>
           <form
-            className="flex flex-wrap items-end gap-2"
+            className="flex flex-wrap items-end gap-x-6 gap-y-3"
             onSubmit={(event) => {
               event.preventDefault();
               void apply([
@@ -394,7 +394,7 @@ export function ProjectOrganizationPanel({
               });
             }}
           >
-            <label className="grid min-w-44 flex-1 gap-1 text-xs">
+            <label className="grid w-72 max-w-full shrink-0 gap-1 text-xs">
               {t('folderName')}
               <input
                 className={control}
@@ -513,8 +513,8 @@ export function ProjectOrganizationPanel({
             </section>
           )}
           <div className="space-y-2 rounded-xl border border-white/10 bg-white/[0.02] p-3">
-            <div className="flex flex-wrap items-center gap-2">
-              <label className="flex min-h-11 items-center gap-2 pr-1 text-sm">
+            <div className="flex flex-wrap items-end gap-x-8 gap-y-3">
+              <label className="flex h-11 shrink-0 items-center gap-2 self-end text-sm">
                 <input
                   ref={selectAllRef}
                   type="checkbox"
@@ -531,7 +531,7 @@ export function ProjectOrganizationPanel({
                 />
                 {t('selectAll')}
               </label>
-              <label className="grid min-w-40 flex-1 gap-1 text-xs">
+              <label className="grid w-56 max-w-full shrink-0 gap-1 text-xs">
                 {t('destination')}
                 <select
                   aria-label={t('destination')}
@@ -552,7 +552,7 @@ export function ProjectOrganizationPanel({
               </label>
               <button
                 type="button"
-                className={`${primaryButton} self-end`}
+                className={`${primaryButton} shrink-0 self-end`}
                 disabled={busy || selectedListedCount === 0 || stale}
                 onClick={() =>
                   void apply([
