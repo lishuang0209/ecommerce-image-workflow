@@ -178,6 +178,25 @@ test('persists Canvas video analysis mode, depth, and text output', () => {
   );
 });
 
+test('keeps a video project marker and drops any other product value', () => {
+  const video = normalizeProjectSnapshotDocument({
+    version: 4,
+    cards: [],
+    frames: {},
+    workflows: { product: 'video', extra: 'image' },
+  });
+  assert.equal(video.workflows?.product, 'video');
+  assert.equal('extra' in (video.workflows ?? {}), false);
+
+  const image = normalizeProjectSnapshotDocument({
+    version: 4,
+    cards: [],
+    frames: {},
+    workflows: { product: 'image' },
+  });
+  assert.equal(image.workflows, undefined);
+});
+
 test('persists Audio Asset and Timeline nodes across Canvas reloads', () => {
   const normalized = normalizeProjectSnapshotDocument({
     version: 3,

@@ -62,6 +62,7 @@ export type ProjectSnapshotDocument = {
   camera?: ProjectSnapshotCamera;
   workflows?: {
     activeTemplate?: ProjectSnapshotActiveTemplateWorkflow | null;
+    product?: 'video';
   };
 };
 
@@ -395,6 +396,7 @@ export const normalizeProjectSnapshotDocument = (
   );
   const normalizedWorkflows = {
     ...(activeTemplate ? { activeTemplate } : {}),
+    ...(workflows.product === 'video' ? { product: 'video' as const } : {}),
   };
   const camera = normalizeCamera(value.camera);
 

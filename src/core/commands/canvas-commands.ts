@@ -182,7 +182,7 @@ export function applyCanvasOperations(
       continue;
     }
     if (operation.type === 'set_workflow') {
-      workflows = { activeTemplate: operation.activeTemplate ?? null };
+      workflows = { ...workflows, activeTemplate: operation.activeTemplate ?? null };
       continue;
     }
     if (operation.type === 'upsert_text') {
