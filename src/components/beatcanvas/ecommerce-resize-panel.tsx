@@ -12,7 +12,7 @@ export function EcommerceResizePanel({ projectId, cards }: { projectId: string; 
   const t = useTranslations('AppShell.studio.ecommerce');
   const [picked, setPicked] = useState<string[]>([]);
   const [targets, setTargets] = useState<string[]>(['3:4']);
-  const [mode, setMode] = useState<'auto' | 'crop' | 'pad'>('auto');
+  const [mode, setMode] = useState<'auto' | 'crop' | 'pad' | 'expand'>('auto');
   const [busy, setBusy] = useState(false), [error, setError] = useState(''), [notice, setNotice] = useState('');
   const [derived, setDerived] = useState<Derived[]>([]), [zipping, setZipping] = useState(false);
   const sources = useMemo(() => {
@@ -34,10 +34,14 @@ export function EcommerceResizePanel({ projectId, cards }: { projectId: string; 
   useEffect(() => { void reload(); }, [projectId]);
   const valid = picked.filter(id => sources.some(row => row.assetId === id));
   async function run() {
+    const count = valid.length * targets.length;
+    if (mode === 'expand' && count > 8) { setError(t('resizeExpandTooMany')); return; }
+    if (mode === 'expand' && !window.confirm(t('resizeExpandConfirm', { count }))) return;
     setBusy(true); setError(''); setNotice('');
     try {
-      const result = await apiJsonPost<{ derived: (Derived & { created: boolean })[] }>('/api/demo/ecommerce-resize', { projectId, assetIds: valid, ratios: targets, mode });
-      setNotice(t('resizeDone', { created: result.derived.filter(item => item.created).length, total: result.derived.length }));
+      const result = await apiJsonPost<{ derived: (Derived & { created: boolean })[]; skipped?: { assetId: string }[] }>('/api/demo/ecommerce-resize', { projectId, assetIds: valid, ratios: targets, mode });
+      const created = result.derived.filter(item => item.created).length;
+      setNotice(mode === 'expand' ? t('resizeExpandDone', { created, reused: result.derived.length - created, skipped: result.skipped?.length || 0 }) : t('resizeDone', { created, total: result.derived.length }));
       await reload();
     } catch (cause) { setError(cause instanceof Error ? cause.message : t('failed')); } finally { setBusy(false); }
   }
@@ -60,7 +64,7 @@ export function EcommerceResizePanel({ projectId, cards }: { projectId: string; 
       return { sourceId, current, label: taskName(first) + (current ? '' : t('resizeOldVersion')), methods: ordered };
     }).sort((x, y) => Number(y.current) - Number(x.current)) }));
   }, [derived, sources]);
-  const modeLabel = (mode: string) => t(mode === 'crop' ? 'resizeCropShort' : 'resizePadShort');
+  const modeLabel = (mode: string) => t(mode === 'crop' ? 'resizeCropShort' : mode === 'expand' ? 'resizeExpandShort' : 'resizePadShort');
   const zipName = (sku: string, label: string, size: Derived) => `${sku}_${label}_${size.ratio.replace(':', 'x')}_${size.mode}.png`.replace(/[\\/:*?"<>|]/g, '-');
   async function remove(assetId: string) {
     if (!window.confirm(t('resizeDeleteConfirm'))) return;
@@ -85,7 +89,7 @@ export function EcommerceResizePanel({ projectId, cards }: { projectId: string; 
   if (!sources.length) return null;
   const toggle = (list: string[], value: string, on: boolean) => on ? [...new Set([...list, value])] : list.filter(item => item !== value);
   return <section aria-label={t('resizeTitle')} className="space-y-3 rounded-xl border border-white/10 bg-white/[0.02] p-3">
-    <div className="flex items-center justify-between text-xs"><h3>{t('resizeTitle')}</h3><span className="text-[var(--beat-text-3)]">{t('resizeFree')}</span></div>
+    <div className="flex items-center justify-between text-xs"><h3>{t('resizeTitle')}</h3><span className="text-[var(--beat-text-3)]">{t(mode === 'expand' ? 'resizeExpandPaid' : 'resizeFree')}</span></div>
     <p className="text-[11px] leading-5 text-[var(--beat-text-3)]">{t('resizeHint')}</p>
     <div className="space-y-1">{sources.map(row => <label key={row.assetId} className="flex min-h-12 items-center gap-2 rounded-lg px-2 text-xs hover:bg-white/[0.03]">
       <input type="checkbox" disabled={busy} checked={picked.includes(row.assetId)} onChange={event => setPicked(current => toggle(current, row.assetId, event.target.checked))} />
@@ -94,9 +98,10 @@ export function EcommerceResizePanel({ projectId, cards }: { projectId: string; 
     </label>)}</div>
     <div className="flex flex-wrap items-center gap-3 text-xs">{ratios.map(ratio => <label key={ratio} className="flex min-h-9 items-center gap-1.5"><input type="checkbox" disabled={busy} checked={targets.includes(ratio)} onChange={event => setTargets(current => toggle(current, ratio, event.target.checked))} />{ratio}</label>)}</div>
     <label className="block text-xs">{t('resizeMode')}<select aria-label={t('resizeMode')} disabled={busy} value={mode} onChange={event => setMode(event.target.value as typeof mode)} className="mt-1 min-h-10 w-full rounded border border-white/15 bg-[var(--beat-surface)] px-2 text-xs">
-      <option value="auto">{t('resizeAuto')}</option><option value="crop">{t('resizeCrop')}</option><option value="pad">{t('resizePad')}</option></select></label>
+      <option value="auto">{t('resizeAuto')}</option><option value="crop">{t('resizeCrop')}</option><option value="pad">{t('resizePad')}</option><option value="expand">{t('resizeExpand')}</option></select></label>
     {mode === 'crop' && <p className="text-[11px] leading-5 text-amber-300">{t('resizeCropWarn')}</p>}
-    <button type="button" disabled={busy || !valid.length || !targets.length} className="min-h-10 w-full rounded-lg bg-[var(--beat-accent)] px-3 text-xs text-black disabled:opacity-40" onClick={() => void run()}>{busy ? t('taskRunningShort') : t('resizeRun') + ' · ' + valid.length * targets.length}</button>
+    {mode === 'expand' && <p className="text-[11px] leading-5 text-amber-300">{t('resizeExpandWarn')}</p>}
+    <button type="button" disabled={busy || !valid.length || !targets.length || (mode === 'expand' && valid.length * targets.length > 8)} className="min-h-10 w-full rounded-lg bg-[var(--beat-accent)] px-3 text-xs text-black disabled:opacity-40" onClick={() => void run()}>{busy ? t('taskRunningShort') : (mode === 'expand' ? t('resizeExpandRun') : t('resizeRun')) + ' · ' + valid.length * targets.length}</button>
     {notice && <p role="status" className="text-xs text-green-300">{notice}</p>}
     {error && <p role="alert" className="text-xs text-red-300">{error}</p>}
     {derived.length > 0 && <div className="space-y-3 border-t border-white/10 pt-3">

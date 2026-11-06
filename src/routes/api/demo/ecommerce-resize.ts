@@ -1,5 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { z } from 'zod';
+import { expandEcommerceImages } from '@/core/demo/ecommerce-expand';
 import { deleteDerivedSize, deriveResizedAssets, listDerivedSizes } from '@/core/demo/ecommerce-resize';
 import { resizeRatios } from '@/core/demo/image-resize';
 import { validateTrustedWorkspaceJsonMutation } from '@/lib/trusted-local-request';
@@ -21,9 +22,10 @@ async function POST({ request }: { request: Request }) {
       projectId: z.string().uuid(),
       assetIds: z.array(z.string().uuid()).min(1).max(40),
       ratios: z.array(z.enum(resizeRatios as [string, ...string[]])).min(1).max(resizeRatios.length),
-      mode: z.enum(['auto', 'crop', 'pad']),
+      mode: z.enum(['auto', 'crop', 'pad', 'expand']),
     }).strict().parse(await readRequestJsonWithLimit(request, 8192));
-    return Response.json({ derived: await deriveResizedAssets({ ...input, ratios: input.ratios as never }) });
+    if (input.mode === 'expand') return Response.json(await expandEcommerceImages({ projectId: input.projectId, assetIds: input.assetIds, ratios: input.ratios as never }));
+    return Response.json({ derived: await deriveResizedAssets({ ...input, ratios: input.ratios as never, mode: input.mode }) });
   } catch (error) {
     return Response.json({ error: error instanceof Error ? error.message : 'Unable to resize images.' }, { status: 400 });
   }

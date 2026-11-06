@@ -49,7 +49,7 @@ export type DeliveryFile = {
   kind: 'main' | 'scene';
   scene: string;
   ratio: string;
-  method: 'original' | 'crop' | 'pad';
+  method: 'original' | 'crop' | 'pad' | 'expand';
   url: string;
   assetId: string;
   /** Path inside the zip, relative to the product folder (or the zip root when the product has no name). */
@@ -57,7 +57,7 @@ export type DeliveryFile = {
   path: string;
 };
 
-const methodLabel = { original: '原图', crop: '居中裁剪', pad: '留白补边' } as const;
+const methodLabel = { original: '原图', crop: '居中裁剪', pad: '留白补边', expand: '扩图' } as const;
 
 export function safeDeliverySegment(value: string) {
   const cleaned = value.replace(/[\\/:*?"<>|\u0000-\u001f]/g, '-').replace(/\s+/g, ' ').trim().slice(0, 80);
@@ -155,9 +155,9 @@ export function deliveryPackage(matrix: DeliveryMatrix, resized: DeliveryResize[
     for (const item of row.cells) {
       if (item.missing || !item.url || !item.assetId) continue;
       add({ sku: item.sku, kind: row.kind, scene: row.scene, ratio: item.ratio, method: 'original', url: item.url, assetId: item.assetId });
-      const extras = new Map<string, DeliveryResize & { mode: 'crop' | 'pad' }>();
+      const extras = new Map<string, DeliveryResize & { mode: 'crop' | 'pad' | 'expand' }>();
       for (const copy of resized) {
-        if (copy.sourceAssetId === item.assetId && copy.url && (copy.mode === 'crop' || copy.mode === 'pad')) extras.set(`${copy.ratio}:${copy.mode}`, { ...copy, mode: copy.mode });
+        if (copy.sourceAssetId === item.assetId && copy.url && (copy.mode === 'crop' || copy.mode === 'pad' || copy.mode === 'expand')) extras.set(`${copy.ratio}:${copy.mode}`, { ...copy, mode: copy.mode });
       }
       for (const copy of extras.values()) add({ sku: item.sku, kind: row.kind, scene: row.scene, ratio: copy.ratio, method: copy.mode, url: copy.url, assetId: copy.id });
     }

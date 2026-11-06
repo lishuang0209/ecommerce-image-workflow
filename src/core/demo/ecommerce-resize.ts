@@ -5,15 +5,16 @@ import { deleteUserAssetById, getProjectAssetById, linkProjectAsset, listProject
 import { autoResizeMode, resizeRatios, resizeToRatio, type ResizeMode, type ResizeRatio } from './image-resize';
 
 export type ResizeChoice = 'auto' | ResizeMode;
+export type DerivedMode = ResizeMode | 'expand';
 type SourceOutput = { sku?: string; task?: string; ratio?: string; preserve?: string; color?: string };
-export type DerivedSize = { id: string; url: string; sourceAssetId: string; ratio: ResizeRatio; mode: ResizeMode; sku: string; task: string; filename: string };
+export type DerivedSize = { id: string; url: string; sourceAssetId: string; ratio: ResizeRatio; mode: DerivedMode; sku: string; task: string; filename: string };
 
-const resizeMeta = (metadata: unknown) => (metadata as { resize?: { ratio?: ResizeRatio; mode?: ResizeMode; sourceAssetId?: string } } | null)?.resize;
+const resizeMeta = (metadata: unknown) => (metadata as { resize?: { ratio?: ResizeRatio; mode?: DerivedMode; sourceAssetId?: string } } | null)?.resize;
 const outputMeta = (metadata: unknown) => (metadata as { ecommerceOutput?: SourceOutput } | null)?.ecommerceOutput;
 
 function toDerived(row: { id: string; publicUrl: string; filename: string | null; metadata: unknown }): DerivedSize | null {
   const resize = resizeMeta(row.metadata), output = outputMeta(row.metadata);
-  if (!resize?.ratio || !resize.mode || !resize.sourceAssetId) return null;
+  if (!resize?.ratio || (resize.mode !== 'crop' && resize.mode !== 'pad' && resize.mode !== 'expand') || !resize.sourceAssetId) return null;
   return { id: row.id, url: row.publicUrl, sourceAssetId: resize.sourceAssetId, ratio: resize.ratio, mode: resize.mode, sku: output?.sku || '', task: output?.task || '', filename: row.filename || row.id };
 }
 

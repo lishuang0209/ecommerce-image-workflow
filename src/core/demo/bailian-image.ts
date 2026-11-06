@@ -9,6 +9,21 @@ export function bailianOrigin(value: string) {
   if (url.protocol !== 'https:' || url.username || url.password || url.port || url.pathname !== '/' || url.search || url.hash || !(url.hostname === 'dashscope.aliyuncs.com' || /^[a-zA-Z0-9-]+\.cn-beijing\.maas\.aliyuncs\.com$/.test(url.hostname))) throw new Error('Invalid Bailian endpoint.');
   return url.origin;
 }
+/** Official result objects only. Redirects are refused so a download cannot leave the result host. */
+export function bailianOutputUrl(image: string) {
+  const url = new URL(image);
+  if (url.protocol !== 'https:' || url.username || url.password || url.port || !/^[a-z0-9-]+\.oss-[a-z0-9-]+\.aliyuncs\.com$/.test(url.hostname)) throw new Error(`Unexpected Bailian output host: ${url.hostname}`);
+  return url;
+}
+export async function downloadBailianOutput(image: string, fetcher: typeof fetch = fetch) {
+  const download = await fetcher(bailianOutputUrl(image), { redirect: 'error', signal: AbortSignal.timeout(120000) });
+  if (!download.ok || Number(download.headers.get('content-length')) > 20 * 1024 * 1024) throw new Error('Unable to download image.');
+  const chunks: Uint8Array[] = []; let length = 0;
+  if (!download.body) throw new Error('Empty image.');
+  const reader = download.body.getReader();
+  try { while (true) { const { done, value } = await reader.read(); if (done) break; length += value.length; if (length > 20 * 1024 * 1024) { await reader.cancel(); throw new Error('Image exceeds size limit.'); } chunks.push(value); } } finally { reader.releaseLock(); }
+  return Buffer.concat(chunks);
+}
 export async function generateBailianImage({ bytes, mimeType, prompt, ratio, references, quality }: { bytes?: Uint8Array; mimeType?: string; prompt: string; ratio: string; references?: { bytes: Uint8Array; mimeType: string }[]; quality?: string }) {
   const key = await getConfig('BAILIAN_API_KEY');
   if (!key) throw new Error('Save your Bailian API key first.');
@@ -31,15 +46,7 @@ export async function generateBailianImage({ bytes, mimeType, prompt, ratio, ref
   await writeFile(resolve(receiptRoot, `${String(result.request_id).replace(/[^a-zA-Z0-9-]/g, '')}.json`), JSON.stringify(result), { mode: 0o600 });
   const image = result.output?.choices?.[0]?.message?.content?.find((item: { image?: string }) => item.image)?.image;
   if (!image) throw new Error('Bailian returned no image.');
-  const url = new URL(image);
-  if (url.protocol !== 'https:' || url.username || url.password || url.port || !/^[a-z0-9-]+\.oss-[a-z0-9-]+\.aliyuncs\.com$/.test(url.hostname)) throw new Error(`Unexpected Bailian output host: ${url.hostname}`);
-  const download = await fetch(url, { redirect: 'error', signal: AbortSignal.timeout(120000) });
-  if (!download.ok || Number(download.headers.get('content-length')) > 20 * 1024 * 1024) throw new Error('Unable to download image.');
-  const chunks: Uint8Array[] = []; let length = 0;
-  if (!download.body) throw new Error('Empty image.');
-  const reader = download.body.getReader();
-  try { while (true) { const { done, value } = await reader.read(); if (done) break; length += value.length; if (length > 20 * 1024 * 1024) { await reader.cancel(); throw new Error('Image exceeds size limit.'); } chunks.push(value); } } finally { reader.releaseLock(); }
-  const output = Buffer.concat(chunks);
+  const output = await downloadBailianOutput(image);
   if (!isSupportedRasterImage('image/png', output)) throw new Error('Invalid output image.');
   return { bytes: output, requestId: result.request_id, usage: result.usage };
 }
