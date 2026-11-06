@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync } from 'node:fs';
+import { rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import test from 'node:test';
@@ -116,7 +117,14 @@ test('MCP server starts and answers when spawned from a foreign working director
       assert.equal(exitResult.code, 143);
     }
   } finally {
-    if (!child.killed) child.kill();
-    rmSync(foreignRoot, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+    child.stdin?.end();
+    if (child.exitCode === null && !child.killed) child.kill();
+    if (child.exitCode === null) await new Promise<void>((done) => child.once('exit', () => done()));
+    // Windows can keep the process cwd locked after the process has exited.
+    // The runner discards its temp disk, so a leftover directory is not a product failure.
+    await rm(foreignRoot, { recursive: true, force: true, maxRetries: 20, retryDelay: 300 }).catch((error: NodeJS.ErrnoException) => {
+      if (process.platform === 'win32' && (error.code === 'EBUSY' || error.code === 'EPERM')) return;
+      throw error;
+    });
   }
 });
