@@ -17,7 +17,7 @@ test('new project opens the shared canvas form and creates one ecommerce canvas'
   await page.goto('/projects');
   await page.getByRole('link', { name: 'New project', exact: true }).first().click();
   await expect(page).toHaveURL(/\/canvas\/?$/);
-  await expect(page.getByRole('button', { name: /Product imagery/ })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByRole('button', { name: /Blank canvas|Product imagery/ })).toHaveCount(0);
   await page.getByLabel('Project name').fill('E2E canvas');
   await page.getByRole('button', { name: 'Create and open canvas', exact: true }).click();
   await expect(page).toHaveURL(/\/canvas\/[^/?]+$/);

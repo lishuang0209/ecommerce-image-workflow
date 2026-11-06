@@ -1344,7 +1344,7 @@
     "runFailed": "Failed; edit and retry",
     "runUnknown": "Processing; after a server restart, confirm the outcome before paying again",
     "runDownload": "Download image",
-    "createIntro": "Choose a template, then enter the canvas to add product facts and references, draft prompts, generate images and review results.",
+    "createIntro": "Name the project, then enter the canvas to add product facts and references, draft prompts, generate images and review results.",
     "chooseTemplate": "Canvas template",
     "blankTemplate": "Blank canvas",
     "blankTemplateHint": "Add your own references and nodes.",

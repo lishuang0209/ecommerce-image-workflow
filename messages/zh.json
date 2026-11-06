@@ -1344,7 +1344,7 @@
     "runFailed": "生成失败，可修改后重试",
     "runUnknown": "处理中；若服务已重启，结果待确认，请勿直接重复付费提交",
     "runDownload": "下载图片",
-    "createIntro": "选择模板后进入画布。在画布中填写商品信息、上传素材、生成提示词与图片，并查看结果。",
+    "createIntro": "填写项目名称后进入画布。在画布中填写商品信息、上传素材、生成提示词与图片，并查看结果。",
     "chooseTemplate": "选择画布模板",
     "blankTemplate": "空白画布",
     "blankTemplateHint": "从空白画布自由添加素材和节点。",
