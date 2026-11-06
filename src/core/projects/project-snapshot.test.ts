@@ -178,6 +178,38 @@ test('persists Canvas video analysis mode, depth, and text output', () => {
   );
 });
 
+test('drops the retired ecommerce instruction card', () => {
+  const normalized = normalizeProjectSnapshotDocument({
+    version: 4,
+    cards: [
+      {
+        id: 'ecommerce-start',
+        kind: 'text',
+        type: 'text',
+        name: 'Step 1',
+        textContent: 'Import images',
+      },
+      {
+        id: 'kept',
+        kind: 'text',
+        type: 'text',
+        name: 'Kept',
+        textContent: 'Stay',
+      },
+    ],
+    frames: {
+      'ecommerce-start': { x: 400, y: 140, w: 480, h: 320 },
+      kept: { x: 0, y: 0, w: 300, h: 200 },
+    },
+  });
+  assert.deepEqual(
+    normalized.cards.map((card) => card.id),
+    ['kept']
+  );
+  assert.equal(normalized.frames['ecommerce-start'], undefined);
+  assert.equal(normalized.frames.kept?.x, 0);
+});
+
 test('keeps a video project marker and drops any other product value', () => {
   const video = normalizeProjectSnapshotDocument({
     version: 4,

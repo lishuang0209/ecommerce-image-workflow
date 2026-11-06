@@ -371,6 +371,7 @@ export const normalizeProjectSnapshotDocument = (
     ? value.cards
         .map(normalizeCard)
         .filter((item): item is CanvasCard => item !== null)
+        .filter((item) => item.id !== 'ecommerce-start')
     : [];
 
   const framesRecord = isRecord(value.frames) ? value.frames : {};

@@ -17,7 +17,7 @@ type Material={id:string;file:File;preview:string;sku:string;role:'product'|'sty
 
 export function EcommerceMaterialPanel({projectId,cards,flush,runTask,onCreateNode,onInsertAsset,onSavedSnapshot,onLocateSku,onLocateCard}:{onLocateCard?:(id:string)=>void;onLocateSku?:(sku:string)=>void;onSavedSnapshot:(document:import('@/core/projects/project-snapshot').ProjectSnapshotDocument,version:number)=>void;onCreateNode?:(type:'image'|'text')=>void;onInsertAsset?:(asset:RecentAsset&{mediaType:'image'|'video'|'audio'})=>void;projectId:string;cards:Record<string,CanvasCard>;flush:()=>Promise<void>;runTask:(id:string)=>Promise<boolean>}){
  const t=useTranslations('AppShell.studio.ecommerce');
- const [panel,setPanel]=useState<'library'|'import'|'workflow'|'nodes'|null>(cards['ecommerce-start']?'import':null);
+ const [panel,setPanel]=useState<'library'|'import'|'workflow'|'nodes'|null>(Object.keys(cards).length===0||cards['ecommerce-start']?'import':null);
  const library=useQuery({queryKey:['ecommerce-materials',projectId],queryFn:()=>apiJsonGet<{materials:SavedEcommerceMaterial[]}>(`/api/demo/ecommerce-materials?projectId=${encodeURIComponent(projectId)}`),enabled:panel!==null,refetchOnWindowFocus:true});
  const [workflowSku,setWorkflowSku]=useState('');
  const queryClient=useQueryClient();
