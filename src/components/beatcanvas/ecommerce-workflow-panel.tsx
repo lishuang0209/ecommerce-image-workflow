@@ -6,6 +6,7 @@ import { apiJsonPost } from '@/lib/api-client';
 import { useTranslations } from '@/core/workspace-lib/shims/next-intl';
 import { sceneDescriptionForTask,ecommerceTaskPattern,isEcommerceTaskPromptReady,compositionOptions,parseCompositionTemplate,isCompleteCompositionTemplate,type CompositionTemplate } from '@/core/demo/ecommerce-contract';
 import { runTasksInOrder } from '@/core/demo/serial-tasks';
+import { skuLabel } from './ecommerce-material-library';
 
 export function EcommerceWorkflowPanel({projectId,cards,flush,runTask,activeSku,onSkuChange,onSavedSnapshot,materialSkus=[],onLocatePrompt,skuProducts={}}:{skuProducts?:Record<string,string>;onLocatePrompt?:(id:string)=>void;materialSkus?:string[];onSavedSnapshot:(document:import('@/core/projects/project-snapshot').ProjectSnapshotDocument,version:number)=>void;activeSku:string;onSkuChange:(sku:string)=>void;projectId:string;cards:Record<string,CanvasCard>;flush:()=>Promise<void>;runTask:(id:string)=>Promise<boolean>}){
  const t=useTranslations('AppShell.studio.ecommerce');
@@ -72,7 +73,7 @@ export function EcommerceWorkflowPanel({projectId,cards,flush,runTask,activeSku,
    <button type="button" disabled={busy||!batchIds.length} className="min-h-10 w-full rounded-lg bg-[var(--beat-accent)] px-3 text-xs text-black disabled:opacity-40" onClick={()=>void execute(batchIds,true)}>{stop?.batch?t('taskRunningShort')+' '+progress:t('batchMainRun')+' · '+batchIds.length}</button>
    {stop?.batch&&<button type="button" className="min-h-10 w-full text-xs" onClick={()=>{stop.requested=true;setNotice(t('stopAfterCurrent'));}}>{t('stop')}</button>}
   </section>}
-  {currentSku&&<label className="block text-xs">{t('currentWorkflowSku')}<EcommerceSelect className={input} disabled={busy} value={currentSku.sku} onChange={event=>{onSkuChange(event.target.value);setSelected([]);setError('');setNotice('');}}>{skus.map(item=><option key={item.sku} value={item.sku}>{item.sku}</option>)}</EcommerceSelect></label>}
+  {currentSku&&<label className="block text-xs">{t('currentWorkflowSku')}<EcommerceSelect className={input} disabled={busy} value={currentSku.sku} onChange={event=>{onSkuChange(event.target.value);setSelected([]);setError('');setNotice('');}}>{skus.map(item=><option key={item.sku} value={item.sku}>{skuLabel({sku:item.sku,product:skuProducts[item.sku]})}</option>)}</EcommerceSelect></label>}
   {skus.filter(item=>item.sku===currentSku?.sku).map(item=>{
    const candidates=Object.values(cards).filter(card=>card.kind==='output'&&card.status==='succeeded'&&card.assetId&&card.sourceConfigCardId===`${item.prefix}-main-image`);
    const reusable=adopted.filter(other=>other.sku!==item.sku&&sameProduct(item.sku,other.sku));
