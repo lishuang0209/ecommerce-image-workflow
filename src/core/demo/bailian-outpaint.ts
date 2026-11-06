@@ -5,6 +5,7 @@ import { getBeatDesignDataRoot } from '@/config/data-root';
 import { getConfig } from '@/modules/config/service';
 import { isSupportedRasterImage } from '@/lib/image-upload-validation';
 import { bailianOrigin, bailianOutputUrl, downloadBailianOutput } from './bailian-image';
+import { isExpandRatio } from './image-expand';
 import { resizeTargets, type ResizeRatio } from './image-resize';
 
 const codeOf = (value: unknown) => String(value || 'unknown').replace(/[^a-zA-Z0-9_.-]/g, '').slice(0, 80);
@@ -14,6 +15,7 @@ const codeOf = (value: unknown) => String(value || 'unknown').replace(/[^a-zA-Z0
  * new margin is generated. `output_ratio` is the whole request, so this never crops and never redraws the product.
  */
 export async function outpaintBailianImage({ bytes, mimeType, ratio }: { bytes: Uint8Array; mimeType: string; ratio: ResizeRatio }, deps?: { fetch?: typeof fetch; key?: string; origin?: string }) {
+  if (!isExpandRatio(ratio)) throw new Error('This ratio cannot be expanded. Use crop or pad.');
   const key = deps?.key ?? await getConfig('BAILIAN_API_KEY');
   if (!key) throw new Error('Save your Bailian API key first.');
   const origin = bailianOrigin(deps?.origin ?? ((await getConfig('BAILIAN_API_BASE_URL')) || 'https://dashscope.aliyuncs.com'));

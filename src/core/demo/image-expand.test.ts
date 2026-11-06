@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import sharp from 'sharp';
-import { expandScales } from './image-expand';
+import { expandScales, isExpandRatio } from './image-expand';
 import { outpaintBailianImage } from './bailian-outpaint';
 
 test('expansion scales keep the whole picture and skip an image that already matches', () => {
@@ -11,6 +11,8 @@ test('expansion scales keep the whole picture and skip an image that already mat
   assert.equal(expandScales(1080, 1440, '3:4'), null);
   assert.throws(() => expandScales(4000, 1000, '9:16'), /3×/);
   assert.throws(() => expandScales(200, 200, '1:1'), /512/);
+  assert.equal(isExpandRatio('4:5'), false);
+  assert.equal(isExpandRatio('16:9'), true);
 });
 
 test('outpainting asks for the ratio, refuses a watermark, and only downloads an official result', async () => {

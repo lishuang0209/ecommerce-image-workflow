@@ -3,8 +3,13 @@ import sharp, { type Sharp } from 'sharp';
 /** Delivery sizes for the MVP. Deterministic local processing: no model call and no cost. */
 export const resizeTargets = {
   '1:1': [1080, 1080],
+  '4:5': [1080, 1350],
   '3:4': [1080, 1440],
+  '2:3': [1080, 1620],
   '9:16': [1080, 1920],
+  '3:2': [1620, 1080],
+  '4:3': [1440, 1080],
+  '16:9': [1920, 1080],
 } as const;
 export type ResizeRatio = keyof typeof resizeTargets;
 export const resizeRatios = Object.keys(resizeTargets) as ResizeRatio[];

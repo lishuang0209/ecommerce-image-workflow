@@ -4,7 +4,7 @@ import { LOCAL_PROJECT_ASSET_BUCKET, persistLocalProjectAsset, resolveLocalProje
 import { getProjectAssetById, linkProjectAsset, recordUserAsset } from '@/core/workspace-lib/assets/user-assets';
 import { outpaintBailianImage } from './bailian-outpaint';
 import { listDerivedSizes, type DerivedSize } from './ecommerce-resize';
-import { expandScales, MAX_EXPAND_IMAGES } from './image-expand';
+import { expandScales, isExpandRatio, MAX_EXPAND_IMAGES } from './image-expand';
 import type { ResizeRatio } from './image-resize';
 
 type SourceOutput = { sku?: string; task?: string; ratio?: string; preserve?: string; color?: string };
@@ -20,6 +20,7 @@ export async function expandEcommerceImages({ projectId, assetIds, ratios, outpa
 }) {
   const wanted = [...new Set(ratios)];
   const sources = [...new Set(assetIds)];
+  if (wanted.some(ratio => !isExpandRatio(ratio))) throw new Error('This ratio cannot be expanded. Use crop or pad.');
   if (!sources.length || sources.length * wanted.length > MAX_EXPAND_IMAGES) throw new Error(`Expand at most ${MAX_EXPAND_IMAGES} images at a time.`);
   const existing: DerivedSize[] = await listDerivedSizes(projectId);
   const derived: (DerivedSize & { created: boolean })[] = [];

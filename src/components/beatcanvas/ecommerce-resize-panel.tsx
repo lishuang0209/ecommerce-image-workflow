@@ -3,8 +3,8 @@ import type { CanvasCard } from '@/core/beatcanvas/canvas-types';
 import { apiJsonDelete, apiJsonGet, apiJsonPost } from '@/lib/api-client';
 import { useTranslations } from '@/core/workspace-lib/shims/next-intl';
 import { adoptedMainSkuName, ecommerceTaskPattern } from '@/core/demo/ecommerce-contract';
-
-const ratios = ['1:1', '3:4', '9:16'] as const;
+import { expandRatios } from '@/core/demo/image-expand';
+import { resizeRatios } from '@/core/demo/image-resize';
 type Derived = { id: string; url: string; sourceAssetId: string; ratio: string; mode: string; sku: string; task: string; filename: string };
 
 /** Batch size change for finished results. Local crop / padding only: no model call, no cost. */
@@ -33,13 +33,14 @@ export function EcommerceResizePanel({ projectId, cards }: { projectId: string; 
   }
   useEffect(() => { void reload(); }, [projectId]);
   const valid = picked.filter(id => sources.some(row => row.assetId === id));
+  const chosen = targets.filter(ratio => mode !== 'expand' || (expandRatios as readonly string[]).includes(ratio));
   async function run() {
-    const count = valid.length * targets.length;
+    const count = valid.length * chosen.length;
     if (mode === 'expand' && count > 8) { setError(t('resizeExpandTooMany')); return; }
     if (mode === 'expand' && !window.confirm(t('resizeExpandConfirm', { count }))) return;
     setBusy(true); setError(''); setNotice('');
     try {
-      const result = await apiJsonPost<{ derived: (Derived & { created: boolean })[]; skipped?: { assetId: string }[] }>('/api/demo/ecommerce-resize', { projectId, assetIds: valid, ratios: targets, mode });
+      const result = await apiJsonPost<{ derived: (Derived & { created: boolean })[]; skipped?: { assetId: string }[] }>('/api/demo/ecommerce-resize', { projectId, assetIds: valid, ratios: chosen, mode });
       const created = result.derived.filter(item => item.created).length;
       setNotice(mode === 'expand' ? t('resizeExpandDone', { created, reused: result.derived.length - created, skipped: result.skipped?.length || 0 }) : t('resizeDone', { created, total: result.derived.length }));
       await reload();
@@ -96,12 +97,13 @@ export function EcommerceResizePanel({ projectId, cards }: { projectId: string; 
       <img src={row.url} alt={row.label} className="size-9 shrink-0 rounded bg-white/5 object-contain" />
       <span className="min-w-0 flex-1 truncate">{row.label}</span>
     </label>)}</div>
-    <div className="flex flex-wrap items-center gap-3 text-xs">{ratios.map(ratio => <label key={ratio} className="flex min-h-9 items-center gap-1.5"><input type="checkbox" disabled={busy} checked={targets.includes(ratio)} onChange={event => setTargets(current => toggle(current, ratio, event.target.checked))} />{ratio}</label>)}</div>
+    <div className="flex flex-wrap items-center gap-3 text-xs">{resizeRatios.map(ratio => { const blocked = mode === 'expand' && !(expandRatios as readonly string[]).includes(ratio); return <label key={ratio} className={'flex min-h-9 items-center gap-1.5 ' + (blocked ? 'text-[var(--beat-text-3)]' : '')}><input type="checkbox" disabled={busy || blocked} checked={!blocked && targets.includes(ratio)} onChange={event => setTargets(current => toggle(current, ratio, event.target.checked))} />{ratio}</label>; })}</div>
     <label className="block text-xs">{t('resizeMode')}<select aria-label={t('resizeMode')} disabled={busy} value={mode} onChange={event => setMode(event.target.value as typeof mode)} className="mt-1 min-h-10 w-full rounded border border-white/15 bg-[var(--beat-surface)] px-2 text-xs">
       <option value="auto">{t('resizeAuto')}</option><option value="crop">{t('resizeCrop')}</option><option value="pad">{t('resizePad')}</option><option value="expand">{t('resizeExpand')}</option></select></label>
     {mode === 'crop' && <p className="text-[11px] leading-5 text-amber-300">{t('resizeCropWarn')}</p>}
     {mode === 'expand' && <p className="text-[11px] leading-5 text-amber-300">{t('resizeExpandWarn')}</p>}
-    <button type="button" disabled={busy || !valid.length || !targets.length || (mode === 'expand' && valid.length * targets.length > 8)} className="min-h-10 w-full rounded-lg bg-[var(--beat-accent)] px-3 text-xs text-black disabled:opacity-40" onClick={() => void run()}>{busy ? t('taskRunningShort') : (mode === 'expand' ? t('resizeExpandRun') : t('resizeRun')) + ' · ' + valid.length * targets.length}</button>
+    {mode === 'expand' && <p className="text-[11px] leading-5 text-[var(--beat-text-3)]">{t('resizeExpandRatioHint', { ratios: expandRatios.join(', ') })}</p>}
+    <button type="button" disabled={busy || !valid.length || !chosen.length || (mode === 'expand' && valid.length * chosen.length > 8)} className="min-h-10 w-full rounded-lg bg-[var(--beat-accent)] px-3 text-xs text-black disabled:opacity-40" onClick={() => void run()}>{busy ? t('taskRunningShort') : (mode === 'expand' ? t('resizeExpandRun') : t('resizeRun')) + ' · ' + valid.length * chosen.length}</button>
     {notice && <p role="status" className="text-xs text-green-300">{notice}</p>}
     {error && <p role="alert" className="text-xs text-red-300">{error}</p>}
     {derived.length > 0 && <div className="space-y-3 border-t border-white/10 pt-3">

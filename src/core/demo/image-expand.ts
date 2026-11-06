@@ -3,6 +3,10 @@ import { resizeTargets, type ResizeRatio } from './image-resize';
 /** The outpainting model keeps the source centred and refuses more than a 3× extension on either axis. */
 export const EXPAND_SCALE_LIMIT = 3;
 export const MAX_EXPAND_IMAGES = 8;
+/** Ratios the Bailian outpainting API accepts. The other delivery sizes stay on local crop or pad. */
+export const expandRatios = ['1:1', '4:3', '3:4', '16:9', '9:16'] as const;
+export type ExpandRatio = (typeof expandRatios)[number];
+export const isExpandRatio = (ratio: string): ratio is ExpandRatio => (expandRatios as readonly string[]).includes(ratio);
 
 /**
  * Scales that turn the source into the target ratio without cropping. Null when the source is already

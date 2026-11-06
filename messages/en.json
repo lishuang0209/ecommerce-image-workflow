@@ -731,6 +731,7 @@
         "resizeExpandPaid": "Charged per image",
         "resizeExpandRun": "AI expand",
         "resizeExpandWarn": "Keeps the picture centred and only paints the new margin out to the target ratio. Images that already match are skipped and do not call the model. At most 8 images at a time.",
+        "resizeExpandRatioHint": "AI expand only supports {ratios}. Use crop or pad for the others.",
         "resizeExpandConfirm": "Expand {count} images with the model? Each image is charged.",
         "resizeExpandDone": "Expanded {created} new images, reused {reused}, and skipped {skipped} that already matched the ratio.",
         "resizeExpandTooMany": "Expand at most 8 images at a time.",

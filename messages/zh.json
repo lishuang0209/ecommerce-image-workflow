@@ -731,6 +731,7 @@
         "resizeExpandPaid": "按张计费",
         "resizeExpandRun": "AI 扩图",
         "resizeExpandWarn": "原图居中保留，只向外补背景到目标比例，不裁切商品。已经是该比例的会跳过，不调用模型。一次最多 8 张。",
+        "resizeExpandRatioHint": "AI 扩图只支持 {ratios}，其他比例请用裁剪或留白。",
         "resizeExpandConfirm": "将调用模型扩图 {count} 张，按张计费。继续吗？",
         "resizeExpandDone": "新扩图 {created} 张，已有 {reused} 张，{skipped} 张已是目标比例所以没有调用模型。",
         "resizeExpandTooMany": "一次最多扩 8 张。",
