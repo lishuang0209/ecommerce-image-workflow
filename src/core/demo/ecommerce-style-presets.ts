@@ -1,11 +1,11 @@
 /** Background and light only. The product itself is a hard constraint in the prompt, not a pixel mask. */
 export const stylePresets = {
-  daylight: '背景为干净的自然日光环境，光线柔和均匀。',
-  warm: '背景为暖色棚拍，柔和暖光。',
-  cool: '背景为冷色棚拍，干净冷光。',
-  gray: '背景为浅灰色简约棚拍，光线均匀。',
-  dark: '背景为深色，用柔和轮廓光把商品分开，不改变商品颜色。',
-  festive: '背景为节庆暖光氛围，不添加文字，道具不得遮挡商品。',
+  daylight: '背景为均匀的浅灰白纯色，无纹理、无渐变、无道具。光线是柔和的自然日光，从上方略偏前照射，阴影轻而边缘干净。',
+  warm: '背景为均匀的暖米色纯色，无纹理、无渐变、无道具。光线是柔和的暖白棚灯，从上方略偏前照射，阴影轻。',
+  cool: '背景为均匀的冷灰蓝纯色，无纹理、无渐变、无道具。光线是干净的冷白棚灯，从上方略偏前照射，阴影轻。',
+  gray: '背景为均匀的浅灰色纯色，无纹理、无渐变、无道具。光线中性、均匀，阴影很轻。',
+  dark: '背景为均匀的深炭灰纯色，无纹理、无渐变、无道具。用柔和轮廓光把商品与背景分开，商品本身的颜色保持不变。',
+  festive: '背景为均匀的暖金色纯色，无纹理。光线是柔和的暖金色节日光，允许远离商品的虚化暖色光斑。不得出现礼盒、彩灯串、飘带、文字，也不得有任何道具接触或遮挡商品。',
 } as const;
 export type StylePreset = keyof typeof stylePresets;
 export const stylePresetIds = Object.keys(stylePresets) as StylePreset[];
@@ -25,5 +25,5 @@ export function nearestStyleFrame(width: number, height: number): StyleFrame {
 export function stylePrompt(preset: StylePreset) {
   const instruction = stylePresets[preset];
   if (!instruction) throw new Error('Choose a style.');
-  return ['只改变背景和光线，严格保持商品不变。', `风格：${instruction}`, '禁止改变商品的颜色、外形、数量、朝向、Logo、文字和结构。禁止插画、卡通、更换商品、添加水印或额外文字。商品仍居中，构图与参考图一致。'].join('\n');
+  return ['只改变背景和光线，严格保持商品不变。', `风格：${instruction}`, '同一风格下，不同颜色必须使用相同的背景颜色、光线方向和阴影强度。', '禁止改变商品的颜色、外形、数量、朝向、Logo、文字和结构。禁止插画、卡通、更换商品、添加水印或额外文字。商品仍居中，构图与参考图一致。'].join('\n');
 }
