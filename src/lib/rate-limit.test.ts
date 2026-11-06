@@ -23,3 +23,20 @@ test('cookie changes cannot bypass a cookie-independent rate limit', () => {
   assert.equal(enforceMinIntervalRateLimit(first, options), null);
   assert.equal(enforceMinIntervalRateLimit(second, options)?.status, 429);
 });
+
+test('different generation cards are not blocked by the same short interval', () => {
+  const url = `https://example.com/api/test-${crypto.randomUUID()}`;
+  const request = () => new Request(url, {
+    method: 'POST',
+    headers: { 'x-forwarded-for': '203.0.113.11' },
+  });
+  const base = {
+    intervalMs: 60_000,
+    keyPrefix: 'generation-precheck',
+    includeCookie: false as const,
+  };
+
+  assert.equal(enforceMinIntervalRateLimit(request(), { ...base, extraKey: 'project|street' }), null);
+  assert.equal(enforceMinIntervalRateLimit(request(), { ...base, extraKey: 'project|grass' }), null);
+  assert.equal(enforceMinIntervalRateLimit(request(), { ...base, extraKey: 'project|street' })?.status, 429);
+});

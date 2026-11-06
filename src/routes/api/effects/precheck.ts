@@ -27,7 +27,7 @@ async function POST({ request }: { request: Request }) {
     const limited = enforceMinIntervalRateLimit(request, {
       intervalMs: 500,
       keyPrefix: 'generation-precheck',
-      extraKey: generation.projectId,
+      extraKey: [generation.projectId, generation.sourceCardId].filter(Boolean).join('|'),
       includeCookie: false,
     });
     if (limited) return limited;
