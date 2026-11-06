@@ -133,15 +133,15 @@ docker compose up --build
 
 LLM / VLM / 图像 / 视频各环节的模型可以在通义、火山方舟、可灵、OpenAI、Gemini、DeepSeek，以及任意 OpenAI 兼容接口之间切换。密钥统一填写在 `config.yaml` 的 `api_providers.<服务商 id>.<字段>` 下（「设置」页填写的也是它），各服务商的 id 依次为 `dashscope`、`ark`、`kling`、`openai`、`gemini`、`deepseek`、`openai_compatible`：
 
-| 服务商 | 主要用途 | 密钥字段 |
-| :--- | :--- | :--- |
-| 阿里云百炼 DashScope | 通义千问、通义万相 Wan 图像/视频 | `api_key` |
-| 火山方舟 Ark | 豆包 Seedream 图像、Seedance 视频 | `api_key` |
-| 可灵 Kling | 可灵视频生成 | `access_key`<br>`secret_key` |
-| OpenAI | GPT 文本/视觉、OpenAI 图像 | `api_key` |
-| Google Gemini | Gemini 文本/视觉 | `api_key` |
-| DeepSeek | DeepSeek 文本 | `api_key` |
-| OpenAI 兼容接口 | vLLM、Ollama、OpenRouter 等 | `api_key`<br>`base_url` |
+| 服务商 | 密钥字段 |
+| :--- | :--- |
+| 阿里云百炼 DashScope<br>通义千问、通义万相 Wan 图像/视频 | `api_key` |
+| 火山方舟 Ark<br>豆包 Seedream 图像、Seedance 视频 | `api_key` |
+| 可灵 Kling<br>可灵视频生成 | `access_key`<br>`secret_key` |
+| OpenAI<br>GPT 文本/视觉、OpenAI 图像 | `api_key` |
+| Google Gemini<br>Gemini 文本/视觉 | `api_key` |
+| DeepSeek<br>DeepSeek 文本 | `api_key` |
+| OpenAI 兼容接口<br>vLLM、Ollama、OpenRouter 等 | `api_key`<br>`base_url` |
 
 配置按三层合并：`backend/config.py` 默认值 → `backend/config.yaml`（「设置」页写入的就是它）→ `SFA_*` 环境变量（只在运行时生效，不写回文件）。详见 [docs/configuration.md](docs/configuration.md)。
 
