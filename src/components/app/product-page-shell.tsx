@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Images, LayoutPanelTop, Scissors, Workflow } from 'lucide-react';
+import { Images, Scissors, Workflow } from 'lucide-react';
 
 import { WorkspaceApiConfigDialog } from '@/components/app/workspace-api-config-dialog';
 import { ProjectSettingsDialog } from './project-settings-dialog';
@@ -161,15 +161,6 @@ export function ProductPageShell({
                   className="flex items-center rounded-full border border-white/[0.09] bg-white/[0.035] p-1"
                   aria-label={t('header.workspaceView')}
                 >
-                  <Link
-                    href={`/studio/${projectId}`}
-                    aria-current={workspaceMode === 'studio' ? 'page' : undefined}
-                    aria-label={t('header.studio')}
-                    className={workspaceTabClassName(workspaceMode === 'studio')}
-                  >
-                    <LayoutPanelTop className="size-3.5" aria-hidden="true" />
-                    <span className="hidden sm:inline">{t('header.studio')}</span>
-                  </Link>
                   <Link
                     href={`/canvas/${projectId}`}
                     aria-current={workspaceMode === 'canvas' ? 'page' : undefined}

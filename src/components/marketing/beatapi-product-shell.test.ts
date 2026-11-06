@@ -9,7 +9,7 @@ const source = readFileSync(
 
 test('product shell keeps workspace navigation and hides SaaS auth', () => {
   assert.match(source, /label: copy\.home, href: '\/'/);
-  assert.match(source, /label: copy\.create, href: '\/studio'/);
+  assert.match(source, /label: copy\.create, href: '\/canvas'/);
   assert.match(source, /href: '\/projects'/);
   assert.doesNotMatch(source, /href: '\/pricing'/);
   assert.doesNotMatch(source, /ProductSurface.*pricing/);

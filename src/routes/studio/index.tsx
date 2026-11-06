@@ -1,21 +1,8 @@
-import { createFileRoute } from '@tanstack/react-router';
-
-import { CreateProjectRoutePage } from '@/components/app/create-project-route-page';
-import { loadCreateProjectRoute } from '@/core/projects/create-project-route-loader';
-
-const validateProjectIntent = (search: Record<string, unknown>) => ({
-  target: (search.target as string) || undefined,
-  model: (search.model as string) || undefined,
-  prompt: (search.prompt as string) || undefined,
-});
+import { createFileRoute, redirect } from '@tanstack/react-router';
 
 export const Route = createFileRoute('/studio/')({
-  validateSearch: validateProjectIntent,
-  loaderDeps: ({ search }) => ({ search }),
-  loader: ({ deps }) => loadCreateProjectRoute(deps.search, 'studio'),
-  component: StudioRouteComponent,
+  beforeLoad: ({ location }) => {
+    throw redirect({ href: `${location.pathname.replace(/\/studio\/?$/, '/canvas')}${location.searchStr}` });
+  },
+  component: () => null,
 });
-
-function StudioRouteComponent() {
-  return <CreateProjectRoutePage data={Route.useLoaderData()} />;
-}

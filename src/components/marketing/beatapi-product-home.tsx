@@ -2,7 +2,6 @@ import {
   ArrowRight,
   ArrowUp,
   FolderClock,
-  PanelsTopLeft,
   Workflow,
 } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
@@ -21,10 +20,6 @@ function getCopy(locale: string) {
     prompt: m['product.home.prompt']({}, { locale: messageLocale }),
     sectionTitle: m['product.home.sectionTitle']({}, { locale: messageLocale }),
     projects: m['product.home.viewProjects']({}, { locale: messageLocale }),
-    studioDescription: m['product.home.studioDescription'](
-      {},
-      { locale: messageLocale }
-    ),
     canvasDescription: m['product.home.canvasDescription'](
       {},
       { locale: messageLocale }
@@ -90,7 +85,7 @@ function PromptComposer({ copy }: { copy: HomeCopy }) {
 
   return (
     <form
-      action="/studio"
+      action="/canvas"
       method="get"
       className="mx-auto mt-10 flex min-h-[160px] w-full max-w-[720px] flex-col rounded-[var(--beat-radius)] border border-white/[0.13] bg-[linear-gradient(145deg,#1b1b1e_0%,#151517_100%)] p-5 text-left shadow-[0_30px_100px_rgba(0,0,0,0.42),inset_0_1px_0_rgba(255,255,255,0.035)] sm:p-6"
     >
@@ -153,16 +148,8 @@ export function BeatApiProductHome({ locale }: { locale: string }) {
 
           <div className="grid gap-4 md:grid-cols-3">
             <WorkspaceCard
-              title="Studio"
-              index="01"
-              description={copy.studioDescription}
-              href="/studio"
-              icon={<PanelsTopLeft className="size-5" />}
-              openLabel={copy.open}
-            />
-            <WorkspaceCard
               title="Canvas"
-              index="02"
+              index="01"
               description={copy.canvasDescription}
               href="/canvas"
               icon={<Workflow className="size-5" />}
@@ -170,7 +157,7 @@ export function BeatApiProductHome({ locale }: { locale: string }) {
             />
             <WorkspaceCard
               title={copy.projectsTitle}
-              index="03"
+              index="02"
               description={copy.projectsDescription}
               href="/projects"
               icon={<FolderClock className="size-5" />}

@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 
 test.use({ locale: 'en-US' });
 
-for (const mode of ['canvas', 'studio'] as const) {
+for (const mode of ['canvas'] as const) {
   test(`choosing ${mode} creates one project and opens it without a second chooser`, async ({
     page,
   }) => {

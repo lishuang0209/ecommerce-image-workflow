@@ -40,7 +40,7 @@ type ShellCopy = ReturnType<typeof getShellCopy>;
 function getNavItems(copy: ShellCopy) {
   return [
     { label: copy.home, href: '/' },
-    { label: copy.create, href: '/studio' },
+    { label: copy.create, href: '/canvas' },
     { label: copy.projects, href: '/projects' },
   ] as const;
 }

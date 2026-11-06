@@ -1,6 +1,5 @@
 import {
   FolderClock,
-  PanelsTopLeft,
   Plus,
   Trash2,
   Workflow,
@@ -34,7 +33,6 @@ function getHistoryCopy(locale: string) {
     title: m['product.history.title']({}, { locale: messageLocale }),
     subtitle: m['product.history.subtitle']({}, { locale: messageLocale }),
     newProject: m['product.history.newProject']({}, { locale: messageLocale }),
-    newStudio: m['product.history.newStudio']({}, { locale: messageLocale }),
     newCanvas: m['product.history.newCanvas']({}, { locale: messageLocale }),
     creating: m['BeatAPI.project.newTitle']({}, { locale: messageLocale }),
     createError: m['BeatAPI.project.newErrorTitle'](
@@ -51,10 +49,6 @@ function getHistoryCopy(locale: string) {
       { locale: messageLocale }
     ),
     createDescription: m['product.history.createDescription'](
-      {},
-      { locale: messageLocale }
-    ),
-    studioDescription: m['product.history.studioDescription'](
       {},
       { locale: messageLocale }
     ),
@@ -140,24 +134,7 @@ function CreateProjectDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="grid gap-3 p-4 sm:grid-cols-2 sm:p-5">
-          <button
-            type="button"
-            disabled={creating}
-            onClick={() => void createProject('studio')}
-            className="group relative min-h-[190px] overflow-hidden rounded-[20px] border border-[#ff7a33]/35 bg-[radial-gradient(circle_at_82%_8%,rgba(255,122,51,0.22),transparent_42%),#171719] p-5 text-left transition hover:-translate-y-0.5 hover:border-[#ff7a33]/65 hover:bg-[#1b1b1e] disabled:cursor-wait disabled:opacity-60"
-          >
-            <span className="grid size-11 place-items-center rounded-[14px] bg-[#ff7a33] text-[#1d1d1f] shadow-[0_12px_30px_rgba(255,122,51,0.22)]">
-              <PanelsTopLeft className="size-5" />
-            </span>
-            <span className="beat-product-display mt-8 block text-[18px] font-semibold tracking-[-0.025em] text-white">
-              {copy.newStudio}
-            </span>
-            <span className="mt-2 block max-w-[220px] text-[12px] leading-5 text-white/45">
-              {copy.studioDescription}
-            </span>
-          </button>
-
+        <div className="grid gap-3 p-4 sm:p-5">
           <button
             type="button"
             disabled={creating}
@@ -276,7 +253,7 @@ export function WorkspacePage({
                       href={buildLocalizedProjectDetailPath({
                         locale,
                         projectId: project.id,
-                        mode: project.lastWorkspaceMode,
+                        mode: project.lastWorkspaceMode === 'studio' ? 'canvas' : project.lastWorkspaceMode,
                       })}
                       aria-label={copy.openProject(name)}
                       className="block"

@@ -6,10 +6,10 @@ function read(path: string) {
   return readFileSync(path, 'utf8');
 }
 
-test('workspace shell exposes projects, Studio, Canvas, assets, and provider configuration', () => {
+test('workspace shell exposes projects, Canvas, assets, and provider configuration', () => {
   const source = read('src/components/app/product-page-shell.tsx');
   assert.match(source, /href="\/"/);
-  assert.match(source, /\/studio\//);
+  assert.doesNotMatch(source, /\/studio\//);
   assert.match(source, /\/canvas\//);
   assert.match(source, /\/assets\//);
   assert.match(source, /WorkspaceApiConfigDialog/);

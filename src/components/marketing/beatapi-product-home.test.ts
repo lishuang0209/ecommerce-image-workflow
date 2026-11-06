@@ -16,5 +16,6 @@ test('root route renders the Home surface instead of redirecting to projects', (
   assert.doesNotMatch(routeSource, /redirect/);
   assert.match(homeSource, /active="home"/);
   assert.match(homeSource, /href="\/projects"/);
-  assert.match(homeSource, /action="\/studio"/);
+  assert.match(homeSource, /action="\/canvas"/);
+  assert.doesNotMatch(homeSource, /href="\/studio"/);
 });

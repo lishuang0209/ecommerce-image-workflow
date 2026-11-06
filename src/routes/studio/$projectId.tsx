@@ -1,7 +1,4 @@
-import { createFileRoute } from '@tanstack/react-router';
-
-import { WorkspaceProjectRoutePage } from '@/components/app/workspace-project-route-page';
-import { loadWorkspaceProjectRoute } from '@/core/projects/workspace-project-route-loader';
+import { createFileRoute, redirect } from '@tanstack/react-router';
 
 export const Route = createFileRoute('/studio/$projectId')({
   ssr: 'data-only',
@@ -10,16 +7,8 @@ export const Route = createFileRoute('/studio/$projectId')({
     model: (search.model as string) || undefined,
     prompt: (search.prompt as string) || undefined,
   }),
-  loaderDeps: ({ search }) => ({ search }),
-  loader: ({ params, deps }) =>
-    loadWorkspaceProjectRoute({
-      projectId: params.projectId,
-      search: deps.search,
-      workspaceMode: 'studio',
-    }),
-  component: StudioProjectRouteComponent,
+  beforeLoad: ({ location }) => {
+    throw redirect({ href: `${location.pathname.replace('/studio/', '/canvas/')}${location.searchStr}` });
+  },
+  component: () => null,
 });
-
-function StudioProjectRouteComponent() {
-  return <WorkspaceProjectRoutePage data={Route.useLoaderData()} />;
-}
