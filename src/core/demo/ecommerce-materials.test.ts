@@ -77,6 +77,14 @@ test('SKU workflow persists explicit adoption and composition-only master withou
  const copied=(await snapshot()).snapshot.cards.find(card=>card.id===wp+'-composition-template');
  assert.equal(copied?.kind==='text'&&copied.textContent,blackTemplate?.kind==='text'&&blackTemplate.textContent);
  assert.ok((await snapshot()).snapshot.cards.find(card=>card.id===wp+'-main-image')?.referenceCardIds.includes(wp+'-composition-template'));
+ // A new colour of the same product follows the adopted composition and its template without any extra click.
+ const grey='Grey',gp=skuNodePrefix(grey);
+ await asset(grey);await bind(grey);await bind(grey,{action:'workflow'});
+ {
+  const cards=(await snapshot()).snapshot.cards;
+  assert.equal(cards.find(card=>card.id===gp+'-master-reference')?.assetId,main);
+  assert.ok(cards.find(card=>card.id===gp+'-main-image')?.referenceCardIds.includes(gp+'-composition-template'));
+ }
  // A different product, or a SKU without a product name, can never borrow this composition or its scenes.
  const other='Lipstick',bare='Unnamed';
  await asset(other,false,'Lipstick');await asset(bare,false,null);
@@ -91,8 +99,8 @@ test('SKU workflow persists explicit adoption and composition-only master withou
  assert.equal(state.snapshot.cards.find(card=>card.id===bp+'-adopted-main')?.assetId,main);
  assert.equal(state.snapshot.cards.find(card=>card.id===wp+'-master-reference')?.assetId,main);
  assert.ok(state.snapshot.cards.find(card=>card.id===wp+'-main-image')?.referenceCardIds.includes(wp+'-master-reference'));
- // Two black scenes + two white scenes + four main images (the two extra product-check SKUs included).
- assert.equal(state.snapshot.cards.filter(card=>card.kind==='generation').length,8);
+ // Two black scenes + two white scenes + five main images (grey and the two product-check SKUs included).
+ assert.equal(state.snapshot.cards.filter(card=>card.kind==='generation').length,9);
  // Marking a new master must not change an already applied concrete reference.
  const nextMain=await asset(black,true);
  await bind(black,{action:'adopt',assetId:nextMain});

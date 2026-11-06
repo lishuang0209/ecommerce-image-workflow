@@ -8,7 +8,7 @@ import { persistBeatDesignCommand } from '@/core/commands/persist';
 import type { CanvasOperation } from '@/core/commands/canvas-commands';
 import type { CanvasCard, CanvasGenerationCard } from '@/core/beatcanvas/canvas-types';
 import { buildTextCard } from '@/core/beatcanvas/text-nodes';
-import { ecommerceTag, pendingEcommercePrompt, ecommerceTaskPattern, preservationPrompt, assertSameProduct, compositionTemplateText, type CompositionTemplate } from './ecommerce-contract';
+import { ecommerceTag, pendingEcommercePrompt, ecommerceTaskPattern, preservationPrompt, assertSameProduct, productOfSku, compositionTemplateText, type CompositionTemplate, type EcommerceTag } from './ecommerce-contract';
 import { getProjectAssetById } from '@/core/workspace-lib/assets/user-assets';
 
 export const skuNodePrefix = (sku: string) => `sku-${createHash('sha256').update(sku).digest('hex').slice(0,16)}`;
@@ -25,6 +25,20 @@ function copiedScenePrompt(cards:Map<string,CanvasCard>,assets:{metadata:unknown
 const legacyFactsLines=/\n?商品名称、型号与容量：请核对后填写，未确认的规格不应补写。|\n?素材标签会在生成时自动读取；请在此补充其他商品事实。/g;
 export const templateFrame=(y:number)=>({x:-40,y:y+440,w:400,h:300});
 
+async function sameProductComposition(projectId:string,sku:string,cards:CanvasCard[]){
+ const {listProjectAssets}=await import('@/core/workspace-lib/assets/user-assets');
+ const rows=await listProjectAssets({projectId,limit:500});
+ const tags:(EcommerceTag|null)[]=rows.filter((row:{metadata:unknown})=>!(row.metadata as {ecommerceOutput?:unknown}|null)?.ecommerceOutput).map((row:{metadata:unknown})=>ecommerceTag(row.metadata));
+ const product=productOfSku(sku,tags);
+ if(!product)return null;
+ const byId=new Map(cards.map(card=>[card.id,card]));
+ const candidates=[...new Set<string>(tags.map(tag=>tag?.sku).filter((other):other is string=>!!other&&other!==sku&&productOfSku(other,tags)===product))]
+  .map(other=>({sku:other,adopted:byId.get(skuNodePrefix(other)+'-adopted-main'),template:byId.has(skuNodePrefix(other)+'-composition-template')}))
+  .filter(item=>item.adopted?.kind==='asset'&&item.adopted.assetId);
+ const best=candidates.find(item=>item.template)||candidates[0];
+ return best?{sku:best.sku,assetId:best.adopted!.assetId!}:null;
+}
+
 export async function bindEcommerceMaterials({projectId,sku,action='import',assetId,masterSku,masterAssetId,clearMaster,sceneDescription,taskId,copyPromptFrom,template}: {
  projectId:string;sku:string;action?:'import'|'workflow'|'adopt'|'master'|'scene'|'template';template?:CompositionTemplate;assetId?:string;masterSku?:string;masterAssetId?:string;clearMaster?:boolean;sceneDescription?:string;taskId?:string;copyPromptFrom?:string;
 }):Promise<{sku:string;assets:number;hasProduct:boolean;taskIds:string[]}> {
@@ -37,6 +51,14 @@ export async function bindEcommerceMaterials({projectId,sku,action='import',asse
  if(action==='workflow'&&!state.snapshot.cards.some(card=>card.id===skuNodePrefix(sku)+'-facts')){
   await bindEcommerceMaterials({projectId,sku,action:'import'});
   return bindEcommerceMaterials({projectId,sku,action,assetId,masterSku,masterAssetId,clearMaster});
+ }
+ // A new colour of a product that already has an adopted main image follows that composition by default.
+ if(action==='workflow'&&!masterSku&&!clearMaster&&!state.snapshot.cards.some(card=>card.id===skuNodePrefix(sku)+'-main-image')){
+  const source=await sameProductComposition(projectId,sku,state.snapshot.cards);
+  if(source){
+   if(!state.snapshot.cards.some(card=>card.id===skuNodePrefix(source.sku)+'-composition-master'))await bindEcommerceMaterials({projectId,sku:source.sku,action:'master',assetId:source.assetId});
+   return bindEcommerceMaterials({projectId,sku,action,masterSku:source.sku});
+  }
  }
  const db=await getDb();
  type AssetRow={id:string;filename:string|null;publicUrl:string;metadata:unknown;type:string};
