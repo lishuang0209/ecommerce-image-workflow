@@ -1164,6 +1164,8 @@
     "allAssets": "Entire project",
     "currentFolder": "Current folder",
     "folder": "Folder",
+    "browse": "表示",
+    "duplicateFolder": "同じ名前のフォルダがあります。",
     "unclassified": "Unclassified",
     "search": "Search assets",
     "folderName": "Folder name",

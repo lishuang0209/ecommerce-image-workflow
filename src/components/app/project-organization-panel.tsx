@@ -51,6 +51,8 @@ export type ProjectOrganizationPanelProps = {
 const control =
   'min-h-11 rounded-lg border border-white/15 bg-[var(--beat-surface,#17181b)] px-3 text-sm text-[var(--beat-text-1)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 disabled:opacity-40';
 const button = `${control} hover:bg-white/10`;
+const primaryButton =
+  'min-h-11 rounded-lg bg-orange-500 px-3 text-sm font-medium text-black hover:bg-orange-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 disabled:cursor-not-allowed disabled:opacity-40';
 
 /** Select every listed asset, or clear those listed assets when they are already selected. */
 export function toggleVisibleSelection(
@@ -62,6 +64,26 @@ export function toggleVisibleSelection(
   const allVisibleSelected = [...visible].every((id) => selected.includes(id));
   if (allVisibleSelected) return selected.filter((id) => !visible.has(id));
   return [...new Set([...selected, ...visible])];
+}
+
+export function folderNameTaken(
+  folders: ReadonlyArray<{
+    id: string;
+    name: string;
+    parentId: string | null;
+  }>,
+  name: string,
+  parentId: string | null,
+  exceptId?: string
+) {
+  const key = name.trim().normalize('NFC').toLowerCase();
+  if (!key) return false;
+  return folders.some(
+    (folder) =>
+      folder.id !== exceptId &&
+      folder.parentId === parentId &&
+      folder.name.trim().normalize('NFC').toLowerCase() === key
+  );
 }
 
 /** Project-local organization controls; all writes are delegated to the shared kernel owner. */
@@ -159,10 +181,10 @@ export function ProjectOrganizationPanel({
     return parts.join(' / ');
   }
   async function apply(operations: OrganizationOperation[]) {
-    if (busy) return;
+    if (busy) return false;
     if (stale) {
       setError(t('conflict'));
-      return;
+      return false;
     }
     setBusy(true);
     setError('');
@@ -173,8 +195,10 @@ export function ProjectOrganizationPanel({
       setSelected([]);
       setQueried(null);
       setCursor(null);
+      return true;
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : t('failed'));
+      return false;
     } finally {
       setBusy(false);
     }
@@ -217,17 +241,19 @@ export function ProjectOrganizationPanel({
     setEditRevision(null);
     setError('');
   }
-  const visibleAssets =
+  const queryText = query.trim().toLowerCase();
+  const matchesQuery = (asset: OrganizationPanelAsset) =>
+    !queryText ||
+    (asset.filename ?? asset.id).toLowerCase().includes(queryText);
+  const visibleAssets = (
     queried ??
     assets.filter(
       (asset) =>
-        (scope === 'project' ||
-          (document.assetLocations[asset.id] ?? null) === folderId) &&
-        (!query ||
-          (asset.filename ?? asset.id)
-            .toLowerCase()
-            .includes(query.toLowerCase()))
-    );
+        scope === 'project' ||
+        (document.assetLocations[asset.id] ?? null) === folderId
+    )
+  ).filter(matchesQuery);
+  const duplicateRootFolder = folderNameTaken(folders, folderName, null);
   const listedAssets = [
     ...new Map(visibleAssets.map((asset) => [asset.id, asset])).values(),
   ];
@@ -235,6 +261,7 @@ export function ProjectOrganizationPanel({
   const selectedVisibleCount = listedIds.filter((id) =>
     selected.includes(id)
   ).length;
+  const selectedListedCount = selectedVisibleCount;
   const allVisibleSelected =
     listedIds.length > 0 && selectedVisibleCount === listedIds.length;
   useEffect(() => {
@@ -300,47 +327,37 @@ export function ProjectOrganizationPanel({
       {tab === 'folders' ? (
         <>
           <form
-            className="flex flex-wrap gap-2"
+            className="flex flex-wrap items-end gap-2"
             onSubmit={(event) => {
               event.preventDefault();
               void search({ folderId, scope, query });
             }}
           >
-            <label className="grid gap-1 text-xs">
-              {t('searchScope')}
+            <label className="grid w-full gap-1 text-xs sm:w-56">
+              {t('browse')}
               <select
-                aria-label={t('searchScope')}
+                aria-label={t('browse')}
                 className={control}
-                value={scope}
+                value={scope === 'project' ? '__all__' : (folderId ?? '')}
                 onChange={(event) => {
-                  const nextScope = event.target.value as 'current' | 'project';
+                  const value = event.target.value;
+                  const nextScope = value === '__all__' ? 'project' : 'current';
+                  const nextFolder = value === '__all__' ? null : value || null;
                   setScope(nextScope);
-                  setQueried(null);
-                  setCursor(null);
-                  void search({ folderId, scope: nextScope, query });
-                }}
-              >
-                <option value="project">{t('allAssets')}</option>
-                <option value="current">{t('currentFolder')}</option>
-              </select>
-            </label>
-            <label className="grid min-w-44 flex-1 gap-1 text-xs">
-              {t('folder')}
-              <select
-                aria-label={t('folder')}
-                className={control}
-                value={folderId ?? ''}
-                onChange={(event) => {
-                  const next = event.target.value || null;
-                  setFolderId(next);
-                  setScope('current');
+                  setFolderId(nextFolder);
+                  setSelected([]);
                   setQueried(null);
                   setCursor(null);
                   setPreview(null);
                   setEditRevision(null);
-                  void search({ folderId: next, scope: 'current', query });
+                  void search({
+                    folderId: nextFolder,
+                    scope: nextScope,
+                    query,
+                  });
                 }}
               >
+                <option value="__all__">{t('allAssets')}</option>
                 <option value="">{t('unclassified')}</option>
                 {folders.map((folder) => (
                   <option value={folder.id} key={folder.id}>
@@ -357,16 +374,12 @@ export function ProjectOrganizationPanel({
                 onChange={(event) => setQuery(event.target.value)}
               />
             </label>
-            <button
-              className={`${button} self-end`}
-              disabled={busy}
-              type="submit"
-            >
+            <button className={`${button} self-end`} disabled={busy} type="submit">
               {t('search')}
             </button>
           </form>
           <form
-            className="flex flex-wrap gap-2"
+            className="flex flex-wrap items-end gap-2"
             onSubmit={(event) => {
               event.preventDefault();
               void apply([
@@ -374,9 +387,11 @@ export function ProjectOrganizationPanel({
                   type: 'create_folder',
                   folderId: crypto.randomUUID(),
                   name: folderName,
-                  parentId: folderId,
+                  parentId: null,
                 },
-              ]);
+              ]).then((saved) => {
+                if (saved) setFolderName('');
+              });
             }}
           >
             <label className="grid min-w-44 flex-1 gap-1 text-xs">
@@ -393,94 +408,58 @@ export function ProjectOrganizationPanel({
             </label>
             <button
               type="submit"
-              className={`${button} self-end`}
-              disabled={busy || !folderName.trim() || stale}
+              className={`${primaryButton} self-end`}
+              disabled={
+                busy || !folderName.trim() || stale || duplicateRootFolder
+              }
             >
               {t('createFolder')}
             </button>
-            <button
-              type="button"
-              className={`${button} self-end`}
-              disabled={busy || !folderId || !folderName.trim() || stale}
-              onClick={() =>
-                folderId &&
-                void apply([
-                  { type: 'rename_folder', folderId, name: folderName },
-                ])
-              }
-            >
-              {t('rename')}
-            </button>
-            <button
-              type="button"
-              className={`${button} self-end`}
-              disabled={busy || !folderId}
-              onClick={() => {
-                if (folderId) {
-                  setPreview(
-                    previewFolderRemoval(document, folderId, revision)
-                  );
-                  setEditRevision(revision);
-                }
-              }}
-            >
-              {t('removeFolder')}
-            </button>
+            {folderId && (
+              <>
+                <button
+                  type="button"
+                  className={`${button} self-end`}
+                  disabled={
+                    busy ||
+                    !folderName.trim() ||
+                    stale ||
+                    folderNameTaken(
+                      folders,
+                      folderName,
+                      document.folders[folderId]?.parentId ?? null,
+                      folderId
+                    )
+                  }
+                  onClick={() =>
+                    void apply([
+                      { type: 'rename_folder', folderId, name: folderName },
+                    ])
+                  }
+                >
+                  {t('rename')}
+                </button>
+                <button
+                  type="button"
+                  className={`${button} self-end`}
+                  disabled={busy}
+                  onClick={() => {
+                    setPreview(
+                      previewFolderRemoval(document, folderId, revision)
+                    );
+                    setEditRevision(revision);
+                  }}
+                >
+                  {t('removeFolder')}
+                </button>
+              </>
+            )}
           </form>
-          <div className="flex flex-wrap items-end gap-2">
-            <label className="grid min-w-44 flex-1 gap-1 text-xs">
-              {t('destination')}
-              <select
-                aria-label={t('destination')}
-                className={control}
-                value={destination}
-                onChange={(event) => {
-                  markEdit();
-                  setDestination(event.target.value);
-                }}
-              >
-                <option value="">{t('unclassified')}</option>
-                {folders.map((folder) => (
-                  <option key={folder.id} value={folder.id}>
-                    {folderPath(folder.id)}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <button
-              type="button"
-              className={button}
-              disabled={busy || !folderId || stale}
-              onClick={() =>
-                folderId &&
-                void apply([
-                  {
-                    type: 'move_folder',
-                    folderId,
-                    parentId: destination || null,
-                  },
-                ])
-              }
-            >
-              {t('moveFolder')}
-            </button>
-            <button
-              type="button"
-              className={button}
-              disabled={busy || !selected.length || stale}
-              onClick={() =>
-                void apply([
-                  {
-                    type: 'assign_assets',
-                    assetIds: selected,
-                    folderId: destination || null,
-                  },
-                ])
-              }
-            >
-              {t('moveSelected', { count: selected.length })}
-            </button>
-          </div>
+          {duplicateRootFolder && (
+            <p role="status" className="text-xs text-orange-300">
+              {t('duplicateFolder')}
+            </p>
+          )}
           {preview && (
             <section
               className="space-y-2 rounded-lg border border-orange-500/30 p-3"
@@ -533,67 +512,136 @@ export function ProjectOrganizationPanel({
               </button>
             </section>
           )}
-          {listedAssets.length > 0 && (
-            <label className="flex min-h-11 w-fit items-center gap-3 text-sm">
-              <input
-                ref={selectAllRef}
-                type="checkbox"
-                checked={allVisibleSelected}
-                disabled={busy}
-                aria-label={t('selectAll')}
-                onChange={() => {
-                  markEdit();
-                  setSelected((current) =>
-                    toggleVisibleSelection(current, listedIds)
-                  );
-                }}
-              />
-              {t('selectAll')}
-            </label>
-          )}
-          <ul
-            className="grid max-h-80 gap-2 overflow-auto sm:grid-cols-2"
-            aria-label={t('assets')}
-          >
-            {listedAssets.map((asset) => (
-              <li
-                className="flex items-center gap-2 rounded-lg border border-white/10 px-3"
-                key={asset.id}
+          <div className="space-y-2 rounded-xl border border-white/10 bg-white/[0.02] p-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <label className="flex min-h-11 items-center gap-2 pr-1 text-sm">
+                <input
+                  ref={selectAllRef}
+                  type="checkbox"
+                  className="size-4 accent-orange-500"
+                  checked={allVisibleSelected}
+                  disabled={busy || listedAssets.length === 0}
+                  aria-label={t('selectAll')}
+                  onChange={() => {
+                    markEdit();
+                    setSelected((current) =>
+                      toggleVisibleSelection(current, listedIds)
+                    );
+                  }}
+                />
+                {t('selectAll')}
+              </label>
+              <label className="grid min-w-40 flex-1 gap-1 text-xs">
+                {t('destination')}
+                <select
+                  aria-label={t('destination')}
+                  className={control}
+                  value={destination}
+                  onChange={(event) => {
+                    markEdit();
+                    setDestination(event.target.value);
+                  }}
+                >
+                  <option value="">{t('unclassified')}</option>
+                  {folders.map((folder) => (
+                    <option key={folder.id} value={folder.id}>
+                      {folderPath(folder.id)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <button
+                type="button"
+                className={`${primaryButton} self-end`}
+                disabled={busy || selectedListedCount === 0 || stale}
+                onClick={() =>
+                  void apply([
+                    {
+                      type: 'assign_assets',
+                      assetIds: listedIds.filter((id) => selected.includes(id)),
+                      folderId: destination || null,
+                    },
+                  ])
+                }
               >
-                <label className="flex min-h-11 min-w-0 flex-1 items-center gap-3 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={selected.includes(asset.id)}
-                    onChange={(event) => {
-                      markEdit();
-                      setSelected((current) =>
-                        event.target.checked
-                          ? [...current, asset.id]
-                          : current.filter((id) => id !== asset.id)
-                      );
-                    }}
-                  />
-                  <span className="truncate">
-                    {asset.filename ?? asset.id}
-                    <small className="block truncate text-[var(--beat-text-3)]">
-                      {document.assetLocations[asset.id]
-                        ? folderPath(document.assetLocations[asset.id])
-                        : t('unclassified')}
-                    </small>
-                  </span>
-                </label>
-                {onLocate && (
-                  <button
-                    type="button"
-                    className={button}
-                    onClick={() => onLocate(asset.id)}
+                {t('moveSelected', { count: selectedListedCount })}
+              </button>
+              {folderId && (
+                <button
+                  type="button"
+                  className={`${button} self-end`}
+                  disabled={busy || stale || destination === folderId}
+                  onClick={() =>
+                    void apply([
+                      {
+                        type: 'move_folder',
+                        folderId,
+                        parentId: destination || null,
+                      },
+                    ])
+                  }
+                >
+                  {t('moveFolder')}
+                </button>
+              )}
+            </div>
+            <ul
+              className="grid max-h-[32rem] gap-2 overflow-auto sm:grid-cols-2"
+              aria-label={t('assets')}
+            >
+              {listedAssets.map((asset) => {
+                const location = document.assetLocations[asset.id];
+                return (
+                  <li
+                    className="flex items-center gap-2 rounded-lg border border-white/10 bg-black/20 px-2"
+                    key={asset.id}
                   >
-                    {t('locate')}
-                  </button>
-                )}
-              </li>
-            ))}
-          </ul>
+                    <label className="flex min-h-14 min-w-0 flex-1 items-center gap-3 text-sm">
+                      <input
+                        type="checkbox"
+                        className="size-4 accent-orange-500"
+                        checked={selected.includes(asset.id)}
+                        onChange={(event) => {
+                          markEdit();
+                          setSelected((current) =>
+                            event.target.checked
+                              ? [...current, asset.id]
+                              : current.filter((id) => id !== asset.id)
+                          );
+                        }}
+                      />
+                      {asset.publicUrl ? (
+                        <img
+                          src={asset.publicUrl}
+                          alt=""
+                          className="size-10 shrink-0 rounded-md object-cover"
+                        />
+                      ) : (
+                        <span className="size-10 shrink-0 rounded-md bg-white/5" />
+                      )}
+                      <span className="min-w-0 truncate">
+                        {asset.filename ?? asset.id}
+                        {scope === 'project' && (
+                          <small className="block truncate text-[var(--beat-text-3)]">
+                            {location ? folderPath(location) : t('unclassified')}
+                          </small>
+                        )}
+                      </span>
+                    </label>
+                    {onLocate && (
+                      <button
+                        type="button"
+                        className={button}
+                        onClick={() => onLocate(asset.id)}
+                      >
+                        {t('locate')}
+                      </button>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
           {!visibleAssets.length && (
             <p className="text-sm text-[var(--beat-text-3)]">{t('noAssets')}</p>
           )}

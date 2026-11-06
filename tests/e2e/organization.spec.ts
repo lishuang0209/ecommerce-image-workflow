@@ -206,7 +206,7 @@ test('Assets folders round trip through keyboard UI, MCP changes preserve dirty 
   await panel.locator('summary').click();
   await expect(
     panel
-      .getByLabel('Folder', { exact: true })
+      .getByLabel('View', { exact: true })
       .locator('option')
       .filter({ hasText: name })
   ).toHaveCount(1);

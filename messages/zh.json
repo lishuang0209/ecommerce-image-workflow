@@ -1164,6 +1164,8 @@
     "allAssets": "整个项目",
     "currentFolder": "当前文件夹",
     "folder": "文件夹",
+    "browse": "查看",
+    "duplicateFolder": "已有同名文件夹",
     "unclassified": "未分类",
     "search": "搜索素材",
     "folderName": "文件夹名称",

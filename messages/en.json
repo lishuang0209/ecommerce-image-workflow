@@ -1164,6 +1164,8 @@
     "allAssets": "Entire project",
     "currentFolder": "Current folder",
     "folder": "Folder",
+    "browse": "View",
+    "duplicateFolder": "A folder with this name already exists.",
     "unclassified": "Unclassified",
     "search": "Search assets",
     "folderName": "Folder name",
