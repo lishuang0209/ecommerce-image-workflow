@@ -32,7 +32,8 @@ test('command connections close after commit and rollback while root reads stay 
     assert.equal(clients[1].closed, true);
     assert.deepEqual((await root.$client.execute('SELECT id FROM close_probe')).rows.map((r:any)=>r.id), ['committed']);
   } finally {
+    await root.$client.execute('PRAGMA wal_checkpoint(TRUNCATE)').catch(() => undefined);
     await closeSqliteDb();
-    await rm(directory,{recursive:true,force:true,maxRetries:10,retryDelay:100});
+    await rm(directory,{recursive:true,force:true,maxRetries:20,retryDelay:300});
   }
 });
