@@ -72,7 +72,8 @@ export async function bindEcommerceMaterials({projectId,sku,action='import',asse
  const factsFrames=state.snapshot.cards.filter(card=>/^sku-[a-f0-9]{16}-facts$/.test(card.id)).map(card=>state.snapshot.frames[card.id]?.y??100);
  const y=state.snapshot.frames[factsId]?.y??(factsFrames.length?Math.max(...factsFrames)+1600:100);
  const operations:CanvasOperation[]=[];
- if(action!=='import'&&state.snapshot.cards.some(card=>card.id.startsWith(prefix+'-')&&card.kind==='generation'&&(card.status==='processing'||card.status==='pending')))throw new Error('Wait for this SKU to finish generating before changing the workflow.');
+ // Marking a composition reference only adds reference cards, so it never has to wait for running tasks.
+ if(action!=='import'&&action!=='master'&&state.snapshot.cards.some(card=>card.id.startsWith(prefix+'-')&&card.kind==='generation'&&(card.status==='processing'||card.status==='pending')))throw new Error('Wait for this SKU to finish generating before changing the workflow.');
  if(action==='import'){
   if(cards.has('ecommerce-start'))operations.push({type:'remove_card',cardId:'ecommerce-start'});
   for(const [index,asset] of assets.entries()){
