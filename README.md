@@ -34,13 +34,15 @@ ShortFilm Agent 是一个**可二次开发的 AIGC 项目底座**。用户输入
 
 内置 5 个开箱即用的场景：
 
-| 内置场景 | 输入 | 产出 | 阶段数 |
-| :--- | :--- | :--- | :---: |
-| **AI 短片** | 一句故事灵感 | 多集剧情短片 | 6 |
-| **电商广告片** | 商品与卖点 | 30–45 秒竖屏带货视频 | 6 |
-| **漫剧** | 世界观与主角设定 | 竖屏多集漫画短剧 | 6 |
-| **旅游宣传片** | 目的地与宣传重点 | 45–60 秒宣传片 | 6 |
-| **商品海报** | 商品与卖点 | 一组 3–4 张电商海报（纯图像） | 4 |
+| 内置场景 | 输入 | 产出 |
+| :--- | :--- | :--- |
+| **AI 短片** | 一句故事灵感 | 多集剧情短片 |
+| **电商广告片** | 商品与卖点 | 30–45 秒竖屏带货视频 |
+| **漫剧** | 世界观与主角设定 | 竖屏多集漫画短剧 |
+| **旅游宣传片** | 目的地与宣传重点 | 45–60 秒宣传片 |
+| **商品海报** | 商品与卖点 | 一组 3–4 张电商海报（纯图像） |
+
+> 其中 4 个视频类场景均为 6 阶段流水线，商品海报为 4 阶段的纯图像流水线。
 
 新增一个场景通常**不需要写代码**：复制一个场景包，改 YAML 和提示词即可。需要更复杂的逻辑时，可以给场景加自定义阶段 Agent。
 
@@ -57,12 +59,10 @@ ShortFilm Agent 是一个**可二次开发的 AIGC 项目底座**。用户输入
 
 ### 环境要求
 
-| 依赖 | 版本要求 | 用途 |
-| :--- | :--- | :--- |
-| Python | 3.10+（推荐 3.12，用 [uv](https://docs.astral.sh/uv/) 管理） | 后端运行 |
-| Node.js | 18+ / npm 9+ | 前端运行 |
-| ffmpeg | 任意较新版本 | 拼接视频片段 |
-| API Key | 至少一家模型服务商 | 模型调用（默认配置使用阿里云百炼 DashScope 和火山方舟 Ark） |
+- Python 3.10+（推荐 3.12，用 [uv](https://docs.astral.sh/uv/) 管理）
+- Node.js 18+ / npm 9+
+- ffmpeg（拼接视频片段）
+- 至少一家模型服务商的 API Key（默认配置使用阿里云百炼 DashScope 和火山方舟 Ark）
 
 ### 一键安装与启动
 
@@ -131,17 +131,17 @@ docker compose up --build
 
 ## 🔧 模型与配置
 
-LLM / VLM / 图像 / 视频各环节的模型可以在通义、火山方舟、可灵、OpenAI、Gemini、DeepSeek，以及任意 OpenAI 兼容接口之间切换。只需要填写实际选用模型对应的服务商密钥：
+LLM / VLM / 图像 / 视频各环节的模型可以在通义、火山方舟、可灵、OpenAI、Gemini、DeepSeek，以及任意 OpenAI 兼容接口之间切换。密钥统一填写在 `config.yaml` 的 `api_providers.<服务商 id>.<字段>` 下（「设置」页填写的也是它），各服务商的 id 依次为 `dashscope`、`ark`、`kling`、`openai`、`gemini`、`deepseek`、`openai_compatible`：
 
-| 服务商 | 配置字段 | 常用用途 |
+| 服务商 | 主要用途 | 密钥字段 |
 | :--- | :--- | :--- |
-| DashScope（阿里云百炼） | `dashscope.api_key` | 通义千问、通义万相 Wan 图像/视频 |
-| 火山方舟 Ark | `ark.api_key` | 豆包 Seedream 图像、Seedance 视频 |
-| 可灵 Kling | `kling.access_key` / `secret_key` | 可灵视频生成 |
-| OpenAI | `openai.api_key` | GPT 文本/视觉、OpenAI 图像 |
-| Gemini | `gemini.api_key` | Gemini 文本/视觉 |
-| DeepSeek | `deepseek.api_key` | DeepSeek 文本 |
-| OpenAI 兼容接口 | `openai_compatible.api_key` / `base_url` | vLLM、Ollama、OpenRouter 等 |
+| 阿里云百炼 DashScope | 通义千问、通义万相 Wan 图像/视频 | `api_key` |
+| 火山方舟 Ark | 豆包 Seedream 图像、Seedance 视频 | `api_key` |
+| 可灵 Kling | 可灵视频生成 | `access_key`、`secret_key` |
+| OpenAI | GPT 文本/视觉、OpenAI 图像 | `api_key` |
+| Google Gemini | Gemini 文本/视觉 | `api_key` |
+| DeepSeek | DeepSeek 文本 | `api_key` |
+| OpenAI 兼容接口 | vLLM、Ollama、OpenRouter 等 | `api_key`、`base_url` |
 
 配置按三层合并：`backend/config.py` 默认值 → `backend/config.yaml`（「设置」页写入的就是它）→ `SFA_*` 环境变量（只在运行时生效，不写回文件）。详见 [docs/configuration.md](docs/configuration.md)。
 
