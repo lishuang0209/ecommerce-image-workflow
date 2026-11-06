@@ -27,5 +27,5 @@ test('packaged migrations upgrade previously auto-upgraded databases without cha
     await applyRuntimeMigration(client,'0004_majestic_thing.sql',migration);
     await assert.rejects(applyRuntimeMigration(client,'broken','CREATE TABLE rollback_probe(id TEXT);\n--> statement-breakpoint\nINVALID SQL'));
     assert.equal((await client.execute("SELECT name FROM sqlite_master WHERE name='rollback_probe'")).rows.length,0);
-  } finally {client.close(); await rm(directory,{recursive:true,force:true});}
+  } finally {client.close(); await rm(directory,{recursive:true,force:true,maxRetries:10,retryDelay:200});}
 });

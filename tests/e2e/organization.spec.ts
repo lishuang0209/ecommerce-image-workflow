@@ -55,7 +55,8 @@ async function fixture(request: APIRequestContext) {
   return { id: source.id as string, targetId: target.id as string };
 }
 
-test('140 saved records render as 12 entries, keyboard expansion persists and old take usage stays exact', async ({
+// The ecommerce MVP canvas no longer mounts CanvasOrganizationPanel; organization logic stays covered by src/core/organization tests.
+test.skip('140 saved records render as 12 entries, keyboard expansion persists and old take usage stays exact', async ({
   page,
   request,
 }) => {
@@ -311,7 +312,8 @@ test('Chinese organization labels and keyboard creation persist without touching
   await page.screenshot({ path: 'test-results/organization-elements-zh.png' });
 });
 
-test('MCP-saved workflow appears in Canvas and UI inserts an unbound draft without generating', async ({
+// The ecommerce MVP canvas no longer mounts CanvasOrganizationPanel; organization logic stays covered by src/core/organization tests.
+test.skip('MCP-saved workflow appears in Canvas and UI inserts an unbound draft without generating', async ({
   page,
   request,
 }) => {
@@ -401,7 +403,8 @@ test('MCP-saved workflow appears in Canvas and UI inserts an unbound draft witho
 });
 
 for (const locale of ['en', 'zh'] as const) {
-  test(`${locale}: keyboard groups, Asset search, fixed reference review and template save/insert stay local`, async ({
+  // The ecommerce MVP canvas no longer mounts CanvasOrganizationPanel; organization logic stays covered by src/core/organization tests.
+  test.skip(`${locale}: keyboard groups, Asset search, fixed reference review and template save/insert stay local`, async ({
     page,
     request,
     context,
@@ -778,7 +781,8 @@ for (const locale of ['en', 'zh'] as const) {
 }
 
 for (const locale of ['en', 'zh'] as const) {
-  test(`${locale}: multiple group containers arrange contents and groups without overlaps, preserve history, undo and reload`, async ({
+  // The ecommerce MVP canvas no longer mounts CanvasOrganizationPanel; organization logic stays covered by src/core/organization tests.
+  test.skip(`${locale}: multiple group containers arrange contents and groups without overlaps, preserve history, undo and reload`, async ({
     page,
     request,
     context,

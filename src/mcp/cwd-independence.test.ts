@@ -117,6 +117,6 @@ test('MCP server starts and answers when spawned from a foreign working director
     }
   } finally {
     if (!child.killed) child.kill();
-    rmSync(foreignRoot, { recursive: true, force: true });
+    rmSync(foreignRoot, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
   }
 });

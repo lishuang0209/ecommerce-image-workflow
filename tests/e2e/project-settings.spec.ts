@@ -119,10 +119,9 @@ test('undo and redo persist an explicitly empty Canvas across reload', async ({ 
   });
   await page.goto(`/canvas/${id}`, { waitUntil: 'domcontentloaded' });
   await expect(page.getByRole('button', { name: 'Project settings', exact: true })).toBeEnabled();
-  const createNode = page.getByRole('button', { name: 'Generation node', exact: true });
-  await expect(createNode).toBeDisabled();
   releaseEditor();
-  await createNode.click();
+  await page.getByRole('button', { name: 'Add node', exact: true }).click();
+  await page.getByRole('button', { name: 'Image generation node', exact: true }).click();
   const cards = async () => (await (await request.get(`/api/app/projects/${id}/snapshot`)).json()).document.cards;
   await expect.poll(async () => (await cards()).length).toBe(1);
   await page.getByRole('button', { name: 'Undo', exact: true }).click();
