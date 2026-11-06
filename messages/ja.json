@@ -1173,6 +1173,7 @@
     "destination": "Destination",
     "moveFolder": "Move folder",
     "moveSelected": "Move {count} selected assets",
+    "selectAll": "すべて選択",
     "removalPreview": "Review folder removal",
     "removalSummary": "{assets} assets and {folders} child folders move to {destination}.",
     "nameConflicts": "Resolve conflicting folder names first.",

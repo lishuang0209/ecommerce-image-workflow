@@ -52,6 +52,18 @@ const control =
   'min-h-11 rounded-lg border border-white/15 bg-[var(--beat-surface,#17181b)] px-3 text-sm text-[var(--beat-text-1)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 disabled:opacity-40';
 const button = `${control} hover:bg-white/10`;
 
+/** Select every listed asset, or clear those listed assets when they are already selected. */
+export function toggleVisibleSelection(
+  selected: readonly string[],
+  visibleIds: readonly string[]
+): string[] {
+  const visible = new Set(visibleIds);
+  if (visible.size === 0) return [...selected];
+  const allVisibleSelected = [...visible].every((id) => selected.includes(id));
+  if (allVisibleSelected) return selected.filter((id) => !visible.has(id));
+  return [...new Set([...selected, ...visible])];
+}
+
 /** Project-local organization controls; all writes are delegated to the shared kernel owner. */
 export function ProjectOrganizationPanel({
   document,
@@ -89,6 +101,7 @@ export function ProjectOrganizationPanel({
   const [narrow, setNarrow] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const queryGeneration = useRef(0);
+  const selectAllRef = useRef<HTMLInputElement>(null);
   const folders = Object.values(document.folders).sort((a, b) =>
     a.name.localeCompare(b.name)
   );
@@ -215,6 +228,20 @@ export function ProjectOrganizationPanel({
             .toLowerCase()
             .includes(query.toLowerCase()))
     );
+  const listedAssets = [
+    ...new Map(visibleAssets.map((asset) => [asset.id, asset])).values(),
+  ];
+  const listedIds = listedAssets.map((asset) => asset.id);
+  const selectedVisibleCount = listedIds.filter((id) =>
+    selected.includes(id)
+  ).length;
+  const allVisibleSelected =
+    listedIds.length > 0 && selectedVisibleCount === listedIds.length;
+  useEffect(() => {
+    if (selectAllRef.current)
+      selectAllRef.current.indeterminate =
+        selectedVisibleCount > 0 && !allVisibleSelected;
+  }, [selectedVisibleCount, allVisibleSelected]);
   const assetOptions = [
     ...new Map(
       [...assets, ...(queried ?? [])].map((asset) => [asset.id, asset])
@@ -506,15 +533,29 @@ export function ProjectOrganizationPanel({
               </button>
             </section>
           )}
+          {listedAssets.length > 0 && (
+            <label className="flex min-h-11 w-fit items-center gap-3 text-sm">
+              <input
+                ref={selectAllRef}
+                type="checkbox"
+                checked={allVisibleSelected}
+                disabled={busy}
+                aria-label={t('selectAll')}
+                onChange={() => {
+                  markEdit();
+                  setSelected((current) =>
+                    toggleVisibleSelection(current, listedIds)
+                  );
+                }}
+              />
+              {t('selectAll')}
+            </label>
+          )}
           <ul
             className="grid max-h-80 gap-2 overflow-auto sm:grid-cols-2"
             aria-label={t('assets')}
           >
-            {[
-              ...new Map(
-                visibleAssets.map((asset) => [asset.id, asset])
-              ).values(),
-            ].map((asset) => (
+            {listedAssets.map((asset) => (
               <li
                 className="flex items-center gap-2 rounded-lg border border-white/10 px-3"
                 key={asset.id}

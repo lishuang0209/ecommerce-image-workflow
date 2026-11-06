@@ -1173,6 +1173,7 @@
     "destination": "目标位置",
     "moveFolder": "移动文件夹",
     "moveSelected": "移动已选的 {count} 个素材",
+    "selectAll": "全选",
     "removalPreview": "预览文件夹移除影响",
     "removalSummary": "{assets} 个素材和 {folders} 个子文件夹将提升至 {destination}。",
     "nameConflicts": "请先处理重名文件夹。",
