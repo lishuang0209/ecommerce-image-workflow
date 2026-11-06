@@ -85,8 +85,15 @@ button[aria-disabled="true"] {
   letter-spacing: -0.02em;
 }
 
+.beat-product-shell .beat-product-hero-title {
+  max-width: 100%;
+  font-size: min(4.75rem, calc((100vw - 3.5rem) / 17));
+  line-height: 1.04;
+  white-space: nowrap;
+}
+
 .beat-product-shell:lang(zh) .beat-product-hero-title {
-  max-width: none;
+  max-width: 100%;
   font-size: min(5rem, calc((100vw - 4rem) / 10.2));
   font-weight: 560;
   letter-spacing: -0.035em;

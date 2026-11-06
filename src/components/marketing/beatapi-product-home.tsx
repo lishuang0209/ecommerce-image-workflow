@@ -120,7 +120,7 @@ export function BeatApiProductHome({ locale }: { locale: string }) {
     <BeatApiProductShell active="home" locale={locale}>
       <main className="mx-auto w-full max-w-[1280px] px-5 sm:px-6">
         <section className="beat-product-hero pb-14 pt-[64px] text-center sm:pt-[84px] lg:pb-[72px]">
-          <h1 className="beat-product-display beat-product-hero-title mx-auto w-full whitespace-nowrap text-[clamp(2.25rem,6.6vw,4.75rem)] font-semibold leading-[1.04] tracking-[-0.04em] text-[#f7f7f8]">
+          <h1 className="beat-product-display beat-product-hero-title mx-auto w-full max-w-full whitespace-nowrap font-semibold tracking-[-0.04em] text-[#f7f7f8]">
             {title}
           </h1>
           <PromptComposer copy={copy} />
