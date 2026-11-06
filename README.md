@@ -137,11 +137,11 @@ LLM / VLM / 图像 / 视频各环节的模型可以在通义、火山方舟、�
 | :--- | :--- | :--- |
 | 阿里云百炼 DashScope | 通义千问、通义万相 Wan 图像/视频 | `api_key` |
 | 火山方舟 Ark | 豆包 Seedream 图像、Seedance 视频 | `api_key` |
-| 可灵 Kling | 可灵视频生成 | `access_key`、`secret_key` |
+| 可灵 Kling | 可灵视频生成 | `access_key`<br>`secret_key` |
 | OpenAI | GPT 文本/视觉、OpenAI 图像 | `api_key` |
 | Google Gemini | Gemini 文本/视觉 | `api_key` |
 | DeepSeek | DeepSeek 文本 | `api_key` |
-| OpenAI 兼容接口 | vLLM、Ollama、OpenRouter 等 | `api_key`、`base_url` |
+| OpenAI 兼容接口 | vLLM、Ollama、OpenRouter 等 | `api_key`<br>`base_url` |
 
 配置按三层合并：`backend/config.py` 默认值 → `backend/config.yaml`（「设置」页写入的就是它）→ `SFA_*` 环境变量（只在运行时生效，不写回文件）。详见 [docs/configuration.md](docs/configuration.md)。
 
