@@ -1,7 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router';
 
-import { CreateProjectRoutePage } from '@/components/app/create-project-route-page';
-import { loadCreateProjectRoute } from '@/core/projects/create-project-route-loader';
+import { CreateCanvasForm } from '@/components/app/create-canvas-form';
+import { getLocale } from '@/core/workspace-lib/shims/next-intl-server';
 
 const validateProjectIntent = (search: Record<string, unknown>) => ({
   target: (search.target as string) || undefined,
@@ -11,11 +11,18 @@ const validateProjectIntent = (search: Record<string, unknown>) => ({
 
 export const Route = createFileRoute('/canvas/')({
   validateSearch: validateProjectIntent,
-  loaderDeps: ({ search }) => ({ search }),
-  loader: ({ deps }) => loadCreateProjectRoute(deps.search, 'canvas'),
+  loader: () => ({ locale: getLocale() }),
   component: CanvasRouteComponent,
 });
 
 function CanvasRouteComponent() {
-  return <CreateProjectRoutePage data={Route.useLoaderData()} />;
+  const { locale } = Route.useLoaderData();
+  const { prompt, target, model } = Route.useSearch();
+  return (
+    <CreateCanvasForm
+      locale={locale}
+      initialName={(prompt ?? '').trim().slice(0, 100)}
+      entry={{ prompt, target, model }}
+    />
+  );
 }

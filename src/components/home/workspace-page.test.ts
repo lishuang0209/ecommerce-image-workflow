@@ -11,9 +11,8 @@ test('projects page stays simple and resumes each project in its last workspace'
   assert.doesNotMatch(source, /type="search"/);
   assert.doesNotMatch(source, /copy\.allProjects/);
   assert.match(source, /mode: project\.lastWorkspaceMode === 'studio' \? 'canvas' : project\.lastWorkspaceMode/);
-  assert.match(source, /copy\.createTitle/);
-  assert.doesNotMatch(source, /createProject\('studio'\)/);
-  assert.match(source, /onClick=\{\(\) => void createProject\('canvas'\)\}/);
-  assert.doesNotMatch(source, /href="\/(studio|canvas)"/);
-  assert.match(source, /sm:whitespace-nowrap/);
+  assert.match(source, /href="\/canvas"/);
+  assert.doesNotMatch(source, /createProject\(/);
+  assert.doesNotMatch(source, /\/demo/);
+  assert.doesNotMatch(source, /href="\/studio"/);
 });
