@@ -113,7 +113,7 @@ const labels = {
   failedStatusLabel: 'Failed',
 };
 
-test('default composer renders the prompt input inline with the character count and close control', () => {
+test('default composer renders the prompt across the row under the reference tags', () => {
   const html = renderToStaticMarkup(
     <BeatCanvasComposerShell
       activeDraftCard={draftCard}
@@ -138,7 +138,7 @@ test('default composer renders the prompt input inline with the character count 
 
   assert.match(
     html,
-    /<div class="grid min-w-0 grid-cols-\[minmax\(0,1fr\)_auto\] items-start gap-x-3 gap-y-2">[\s\S]*min-h-\[56px\][\s\S]*pl-2 pr-0 py-0[\s\S]*placeholder="今天我们要创作什么"[\s\S]*0\/1000[\s\S]*aria-label="Close generator"/
+    /0\/1000[\s\S]*aria-label="Close generator"[\s\S]*field-sizing-fixed min-h-\[72px\][\s\S]*w-full[\s\S]*placeholder="今天我们要创作什么"/
   );
   assert.match(html, /w-\[min\(560px,calc\(100vw-32px\)\)\]/);
   assert.doesNotMatch(

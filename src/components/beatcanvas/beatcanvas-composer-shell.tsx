@@ -158,17 +158,40 @@ export function BeatCanvasComposerShell({
       {taskAccessory}
       {/* ── Header row ── */}
       <div className="px-3.5 pt-3">
-        <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-start gap-x-3 gap-y-2">
-          <div suppressHydrationWarning className="contents">
+        <div className="flex min-w-0 flex-col gap-2">
+          <div className="flex min-w-0 items-start gap-3">
             {renderedPromptAccessory ? (
               <div
                 data-composer-reference-row
-                className="mb-1.5 flex min-h-7 min-w-0 items-center pl-2"
+                className="flex min-h-7 min-w-0 flex-1 items-center pl-2"
               >
                 {renderedPromptAccessory}
               </div>
-            ) : null}
-            <div className="relative">
+            ) : (
+              <div className="min-w-0 flex-1" />
+            )}
+            <div className="flex shrink-0 items-center gap-2 pt-0.5">
+              <span
+                className={cn(
+                  'text-[10px] font-medium tabular-nums',
+                  promptCharacterCount >= promptCharacterLimit
+                    ? 'text-[var(--beatcanvas-warning)]'
+                    : 'text-[var(--beat-text-3)]'
+                )}
+              >
+                {promptCharacterCount}/{promptCharacterLimit}
+              </span>
+              <button
+                type="button"
+                className="inline-flex size-7 items-center justify-center rounded-lg text-[var(--beat-text-3)] transition hover:bg-white/10 hover:text-white"
+                onClick={() => onActiveComposerCardIdChange(null)}
+                aria-label={labels.closeComposerLabel}
+              >
+                <X className="size-3.5" />
+              </button>
+            </div>
+          </div>
+          <div className="relative min-w-0">
               <Textarea
                 ref={promptInputRef}
                 value={promptInputValue}
@@ -236,7 +259,7 @@ export function BeatCanvasComposerShell({
                 }}
                 placeholder={promptPlaceholder}
                 readOnly={isDraftBusy}
-                className="min-h-[56px] max-h-[180px] resize-none overflow-y-auto border-0 bg-transparent pl-2 pr-0 py-0 text-[14px] font-medium leading-[1.6] shadow-none outline-none placeholder:text-[14px] placeholder:font-normal focus:border-transparent focus:outline-none"
+                className="field-sizing-fixed min-h-[72px] max-h-[180px] w-full resize-none overflow-y-auto border-0 bg-transparent px-2 py-0 text-[14px] font-medium leading-[1.6] shadow-none outline-none placeholder:text-[14px] placeholder:font-normal focus:border-transparent focus:outline-none"
               />
 
               {activeMention && mentionOptions.length > 0 ? (
@@ -299,28 +322,6 @@ export function BeatCanvasComposerShell({
                 </div>
               ) : null}
             </div>
-          </div>
-
-          <div className="flex shrink-0 items-center gap-2 pt-0.5">
-            <span
-              className={cn(
-                'text-[10px] font-medium tabular-nums',
-                promptCharacterCount >= promptCharacterLimit
-                  ? 'text-[var(--beatcanvas-warning)]'
-                  : 'text-[var(--beat-text-3)]'
-              )}
-            >
-              {promptCharacterCount}/{promptCharacterLimit}
-            </span>
-            <button
-              type="button"
-              className="inline-flex size-7 items-center justify-center rounded-lg text-[var(--beat-text-3)] transition hover:bg-white/10 hover:text-white"
-              onClick={() => onActiveComposerCardIdChange(null)}
-              aria-label={labels.closeComposerLabel}
-            >
-              <X className="size-3.5" />
-            </button>
-          </div>
         </div>
       </div>
 
