@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useTranslations } from '@/core/workspace-lib/shims/next-intl';
 import type { CanvasTextRole } from '@/core/beatcanvas/canvas-types';
 import { MAX_TEXT_NODE_CHARS } from '@/core/beatcanvas/text-nodes';
-import { ecommercePromptPattern, parseCompositionTemplate } from '@/core/demo/ecommerce-contract';
+import { ecommercePromptPattern, factsProductName, parseCompositionTemplate } from '@/core/demo/ecommerce-contract';
 import { useCanvasFrontLayer } from '../beatcanvas-front-layer-context';
 import type { BeatCanvasFlowNode } from '../react-flow/beatcanvas-react-flow-types';
 
@@ -28,7 +28,7 @@ export function TextCardNode({
   if (card?.kind !== 'text') return null;
   const skuPrompt = ecommercePromptPattern.exec(id);
   const facts = skuPrompt ? cards[`${skuPrompt[1]}-facts`] : undefined;
-  const productName = facts?.kind === 'text' ? /商品：([^；\n]+)/.exec(facts.textContent)?.[1] : undefined;
+  const productName = facts?.kind === 'text' ? factsProductName(facts.textContent) : undefined;
   const templateCard = skuPrompt?.[2] === 'main' ? cards[`${skuPrompt[1]}-composition-template`] : undefined;
   const template = templateCard?.kind === 'text' ? parseCompositionTemplate(templateCard.textContent) : null;
   const short = (key: string) => et(key).replace(/（.*?）|\(.*?\)/g, '').trim();

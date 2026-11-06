@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import type { CanvasCard } from '@/core/beatcanvas/canvas-types';
 import { apiJsonDelete, apiJsonGet, apiJsonPost } from '@/lib/api-client';
 import { useTranslations } from '@/core/workspace-lib/shims/next-intl';
-import { ecommerceTaskPattern } from '@/core/demo/ecommerce-contract';
+import { adoptedMainSkuName, ecommerceTaskPattern } from '@/core/demo/ecommerce-contract';
 
 const ratios = ['1:1', '3:4', '9:16'] as const;
 type Derived = { id: string; url: string; sourceAssetId: string; ratio: string; mode: string; sku: string; task: string; filename: string };
@@ -19,7 +19,7 @@ export function EcommerceResizePanel({ projectId, cards }: { projectId: string; 
     const rows: { assetId: string; url: string; label: string }[] = [];
     for (const card of Object.values(cards)) {
       const main = /^(sku-[a-f0-9]{16})-adopted-main$/.exec(card.id);
-      if (main && card.assetId && card.url) rows.push({ assetId: card.assetId, url: card.url, label: card.name.replace(/ · 已采用主图.*$/, '') + ' · ' + t('mainTaskTitle') });
+      if (main && card.assetId && card.url) rows.push({ assetId: card.assetId, url: card.url, label: adoptedMainSkuName(card.name) + ' · ' + t('mainTaskTitle') });
     }
     const latest = new Map<string, CanvasCard>();
     for (const card of Object.values(cards)) {

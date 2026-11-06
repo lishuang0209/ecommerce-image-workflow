@@ -132,3 +132,6 @@ export function parseCompositionTemplate(text: string | undefined): Partial<Comp
  return result;
 }
 export const isCompleteCompositionTemplate = (text: string | undefined) => Object.keys(parseCompositionTemplate(text)).length === 3;
+
+export const adoptedMainSkuName = (name: string) => name.replace(/ · 已采用主图.*$/, '');
+export const factsProductName = (facts: string) => /商品：([^；\n]+)/.exec(facts)?.[1];
