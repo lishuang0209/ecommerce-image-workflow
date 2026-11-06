@@ -17,5 +17,7 @@ test('root route renders the Home surface instead of redirecting to projects', (
   assert.match(homeSource, /active="home"/);
   assert.match(homeSource, /href="\/projects"/);
   assert.match(homeSource, /action="\/canvas"/);
+  assert.match(homeSource, /whitespace-nowrap/);
+  assert.doesNotMatch(homeSource, /copy\.eyebrow/);
   assert.doesNotMatch(homeSource, /href="\/studio"/);
 });

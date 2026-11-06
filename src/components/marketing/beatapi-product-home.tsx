@@ -14,7 +14,6 @@ import { BeatApiProductShell } from './beatapi-product-shell';
 function getCopy(locale: string) {
   const messageLocale = normalizeLocale(locale);
   return {
-    eyebrow: m['product.home.eyebrow']({}, { locale: messageLocale }),
     titleLine1: m['product.home.titleLine1']({}, { locale: messageLocale }),
     titleLine2: m['product.home.titleLine2']({}, { locale: messageLocale }),
     prompt: m['product.home.prompt']({}, { locale: messageLocale }),
@@ -112,22 +111,17 @@ function PromptComposer({ copy }: { copy: HomeCopy }) {
 
 export function BeatApiProductHome({ locale }: { locale: string }) {
   const copy = getCopy(locale);
-  const titleLines = [copy.titleLine1, copy.titleLine2];
+  const title =
+    normalizeLocale(locale) === 'en'
+      ? `${copy.titleLine1} ${copy.titleLine2}`
+      : `${copy.titleLine1}${copy.titleLine2}`;
 
   return (
     <BeatApiProductShell active="home" locale={locale}>
       <main className="mx-auto w-full max-w-[1280px] px-5 sm:px-6">
         <section className="beat-product-hero pb-14 pt-[64px] text-center sm:pt-[84px] lg:pb-[72px]">
-          <p className="beat-product-display inline-flex items-center gap-2.5 text-[10px] font-semibold tracking-[0.18em] text-[var(--beat-accent)] sm:text-[11px]">
-            <span className="size-1.5 rounded-full bg-[var(--beat-accent)]" />
-            {copy.eyebrow}
-          </p>
-          <h1 className="beat-product-display beat-product-hero-title mx-auto mt-6 w-full max-w-[720px] text-[clamp(2.25rem,6.6vw,4.75rem)] font-semibold leading-[1.04] tracking-[-0.04em] text-[#f7f7f8]">
-            {titleLines.map((line) => (
-              <span key={line} className="block">
-                {line}
-              </span>
-            ))}
+          <h1 className="beat-product-display beat-product-hero-title mx-auto w-full whitespace-nowrap text-[clamp(2.25rem,6.6vw,4.75rem)] font-semibold leading-[1.04] tracking-[-0.04em] text-[#f7f7f8]">
+            {title}
           </h1>
           <PromptComposer copy={copy} />
         </section>

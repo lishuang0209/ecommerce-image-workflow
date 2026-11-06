@@ -86,11 +86,12 @@ button[aria-disabled="true"] {
 }
 
 .beat-product-shell:lang(zh) .beat-product-hero-title {
-  max-width: 45rem;
-  font-size: clamp(2.75rem, 7vw, 5rem);
+  max-width: none;
+  font-size: min(5rem, calc((100vw - 4rem) / 10.2));
   font-weight: 560;
   letter-spacing: -0.035em;
   line-height: 1.2;
+  white-space: nowrap;
 }
 
 .beat-product-shell:lang(zh) .beat-product-page-title {
