@@ -14,18 +14,38 @@ test('SKU references require own product and exclude foreign or lifestyle inputs
  assert.throws(()=>assertSkuReferences('black','scene',[product,null]));
  assert.equal(ecommerceTag({ecommerce:{sku:'black',role:'invalid'}}),null);
 });
-test('selected image tasks await each result and stop on first failure',async()=>{
- const calls:string[]=[];let finish!:(value:boolean)=>void;
+test('two image tasks start together and a failure does not start the rest',async()=>{
+ const calls:string[]=[];
+ let finish!:(value:boolean)=>void;
  const gate=new Promise<boolean>(resolve=>finish=resolve);
  const pending=runTasksInOrder(['first','second','third'],async id=>{calls.push(id);return id==='first'?gate:false;},()=>false,()=>{});
- assert.deepEqual(calls,['first']);finish(true);
+ assert.deepEqual(calls,['first','second']);
+ finish(true);
  const result=await pending;
- assert.deepEqual(calls,['first','second']);assert.equal(result.failedId,'second');assert.equal(result.completed,1);
+ assert.deepEqual(calls,['first','second']);
+ assert.equal(result.failedId,'second');
+ assert.deepEqual(result.succeeded,['first']);
+ assert.equal(result.stopped,false);
 });
-test('stop after current never submits remaining or duplicate tasks',async()=>{
- let stop=false;const calls:string[]=[];
- const result=await runTasksInOrder(['one','one','two'],async id=>{calls.push(id);stop=true;return true;},()=>stop,()=>{});
- assert.deepEqual(calls,['one']);assert.equal(result.stopped,true);
+test('stop finishes tasks already started and skips the queued image',async()=>{
+ const calls:string[]=[];
+ let finish!:(value:boolean)=>void;
+ const gate=new Promise<boolean>(resolve=>finish=resolve);
+ let stop=false;
+ const pending=runTasksInOrder(['one','two','three'],async id=>{calls.push(id);await gate;return true;},()=>stop,()=>{});
+ assert.deepEqual(calls,['one','two']);
+ stop=true;
+ finish(true);
+ const result=await pending;
+ assert.deepEqual(calls,['one','two']);
+ assert.equal(result.stopped,true);
+ assert.deepEqual(result.succeeded,['one','two']);
+});
+test('duplicate task ids are submitted once',async()=>{
+ const calls:string[]=[];
+ const result=await runTasksInOrder(['one','one'],async id=>{calls.push(id);return true;},()=>false,()=>{});
+ assert.deepEqual(calls,['one']);
+ assert.equal(result.completed,1);
 });
 
 test('SKU prompts cannot use another SKU facts node',()=>{

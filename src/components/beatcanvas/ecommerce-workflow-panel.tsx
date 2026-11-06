@@ -47,17 +47,23 @@ export function EcommerceWorkflowPanel({projectId,cards,flush,runTask,activeSku,
   if(cards[`${from.prefix}-composition-master`]?.assetId!==assetId&&!await action(from.sku,'master',{assetId}))return;
   if(await action(sku,'workflow',{masterSku:from.sku,masterAssetId:assetId}))setNotice(t('compositionReused',{sku:from.sku}));
  }
- // `only` runs the given tasks (which may span SKUs); without it the checked scene tasks run in order.
+ // `only` runs the given tasks. Main images finish before scenes, and each pass runs two at a time.
  async function execute(only?:string[],batch=false){
   const ids=(only??selected).filter(id=>cards[id]?.kind==='generation'&&ecommerceTaskPattern.test(id));if(!ids.length)return;
   if(ids.some(id=>!isEcommerceTaskPromptReady(cards[id],cards))){setError(t('completePromptFirst'));return;}
-  // Main images first, then scene variants. Adoption is deliberately a human checkpoint.
-  ids.sort((a,b)=>Number(!a.endsWith('-main-image'))-Number(!b.endsWith('-main-image')));
+  const ordered=[...new Set(ids)];
+  const groups=[ordered.filter(id=>id.endsWith('-main-image')),ordered.filter(id=>!id.endsWith('-main-image'))].filter(group=>group.length);
   const control={requested:false,batch};setStop(control);setBusy(true);setError('');setNotice('');
-  try{const result=await runTasksInOrder(ids,runTask,()=>control.requested,(current,total)=>setProgress(`${current}/${total}`));
-   const done=ids.slice(0,result.completed);
-   setSelected(current=>current.filter(id=>!done.includes(id)));setMainBatch(current=>current.filter(id=>!done.includes(id)));
-   if(result.failedId)throw new Error(t('stoppedOnFailure'));setNotice(result.stopped?t('stopped'):t('finished'));
+  try{
+   const succeeded:string[]=[];
+   let failedId:string|null=null,stopped=false,offset=0;
+   for(const group of groups){
+    if(failedId||stopped)break;
+    const result=await runTasksInOrder(group,runTask,()=>control.requested,current=>setProgress(`${offset+current}/${ordered.length}`));
+    succeeded.push(...result.succeeded);failedId=result.failedId;stopped=result.stopped;offset+=group.length;
+   }
+   setSelected(current=>current.filter(id=>!succeeded.includes(id)));setMainBatch(current=>current.filter(id=>!succeeded.includes(id)));
+   if(failedId)throw new Error(t('stoppedOnFailure'));setNotice(stopped?t('stopped'):t('finished'));
   }catch(cause){setError(cause instanceof Error?cause.message:t('failed'));}finally{setBusy(false);setStop(null);setProgress('');}
  }
  const input='min-h-10 w-full rounded border border-white/15 bg-[var(--beat-surface)] px-2 text-xs';

@@ -14,12 +14,12 @@ import { recordGeneration, updateGenerationById } from '@/core/effects/record-ge
 import { isSupportedRasterImage } from '@/lib/image-upload-validation';
 import { getConfig } from '@/modules/config/service';
 import { generateBailianImage } from './bailian-image';
+import { releaseImageGeneration, reserveImageGeneration } from './image-generation-slots';
 
 const root = () => resolve(getBeatDesignDataRoot(), 'bailian-canvas-intents');
 const tokenPath = (token: string) => { if (!/^[a-f0-9-]{36}$/.test(token)) throw new Error('Invalid generation authorization.'); return resolve(root(), `${token}.json`); };
 async function save(token: string, value: unknown) { const target = tokenPath(token), temp = `${target}.${randomUUID()}.tmp`; await writeFile(temp, JSON.stringify(value), { mode: 0o600 }); await rename(temp, target); }
 type Intent = { promptDigest?: string; digest: string; projectId: string; sourceCardId: string; expires: number; generationId?: string };
-let busy = false;
 export function isBailianCanvasGeneration(value: unknown) {
   const request = value as { modelId?: string; sourceSurface?: string } | null;
   return request?.modelId === 'qwen-image-2.1' && request.sourceSurface === 'canvas';
@@ -89,9 +89,9 @@ export async function submitBailianCanvas(source: unknown, token: string) {
   if (generation.projectId !== intent.projectId || generation.sourceCardId !== intent.sourceCardId) throw new Error('Generation authorization does not match the source.');
   if (intent.generationId) return { status: 'processing', wmTaskId: intent.generationId };
   if (intent.expires < Date.now()) throw new Error('Generation authorization expired. Review the node again.');
-  if (busy) throw new Error('An image is already generating. Wait before submitting.');
-  busy = true;
+  if (!reserveImageGeneration()) throw new Error('Two images are already generating. Wait before submitting another.');
   let id: string | null = null;
+  let slotHeld = true;
   try {
     const reviewed = await reviewBailianCanvas(source);
     if (reviewed.context.sourceContextDigest !== intent.digest || createHash('sha256').update(reviewed.prompt).digest('hex') !== intent.promptDigest) throw new Error('Connected inputs changed. Review the node again.');
@@ -116,8 +116,9 @@ export async function submitBailianCanvas(source: unknown, token: string) {
         await linkGenerationAsset({ generationId, assetId: persisted.assetId, role: 'output' });
         await updateGenerationById({ id: generationId, status: 'succeeded', output: { resultUrl: persisted.publicUrl, stored_result_url: persisted.publicUrl, assetId: persisted.assetId, provider: 'bailian', usage: output.usage } });
       } catch (error) { await updateGenerationById({ id: generationId, status: 'failed', error: error instanceof Error ? error.message : 'Bailian generation failed.' }); }
-      finally { busy = false; }
+      finally { releaseImageGeneration(); }
     })();
+    slotHeld = false;
     return { status: 'processing', wmTaskId: id };
-  } catch (error) { if (id) await updateGenerationById({ id, status: 'failed', error: error instanceof Error ? error.message : 'Generation failed.' }); busy = false; throw error; }
+  } catch (error) { if (slotHeld) releaseImageGeneration(); if (id) await updateGenerationById({ id, status: 'failed', error: error instanceof Error ? error.message : 'Generation failed.' }); throw error; }
 }

@@ -1,10 +1,26 @@
-export async function runTasksInOrder(ids: string[], run: (id:string)=>Promise<boolean>, stop: ()=>boolean, progress: (current:number,total:number)=>void) {
- let completed=0;
- for(const [index,id] of [...new Set(ids)].entries()) {
-  if(stop())return {completed,stopped:true,failedId:null};
-  progress(index+1,new Set(ids).size);
-  if(!await run(id))return {completed,stopped:false,failedId:id};
-  completed++;
- }
- return {completed,stopped:false,failedId:null};
+import { concurrentImageLimit } from './image-generation-slots';
+
+export async function runTasksInOrder(ids: string[], run: (id: string) => Promise<boolean>, stop: () => boolean, progress: (current: number, total: number) => void) {
+  const pending = [...new Set(ids)];
+  const total = pending.length;
+  const succeeded: string[] = [];
+  let next = 0;
+  let started = 0;
+  let failedId: string | null = null;
+  let stopped = false;
+
+  async function worker() {
+    while (next < total && !failedId && !stop()) {
+      const id = pending[next];
+      next += 1;
+      started += 1;
+      progress(started, total);
+      if (await run(id)) succeeded.push(id);
+      else if (!failedId) failedId = id;
+    }
+    if (!failedId && stop() && next < total) stopped = true;
+  }
+
+  await Promise.all(Array.from({ length: Math.min(concurrentImageLimit, total) }, () => worker()));
+  return { completed: succeeded.length, stopped: stopped && !failedId, failedId, succeeded };
 }
