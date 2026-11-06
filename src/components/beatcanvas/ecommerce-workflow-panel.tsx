@@ -1,5 +1,6 @@
 import {EcommerceSelect} from './ecommerce-select';
 import {EcommerceResizePanel} from './ecommerce-resize-panel';
+import {EcommerceStylePanel} from './ecommerce-style-panel';
 import {EcommerceDeliveryPanel} from './ecommerce-delivery-panel';
 import { useState } from 'react';
 import type { CanvasCard } from '@/core/beatcanvas/canvas-types';
@@ -17,6 +18,7 @@ export function EcommerceWorkflowPanel({projectId,cards,flush,runTask,activeSku,
  const sameProduct=(a:string,b:string)=>!!skuProducts[a]&&skuProducts[a]===skuProducts[b];
  const [selected,setSelected]=useState<string[]>([]),[mainBatch,setMainBatch]=useState<string[]>([]),[progress,setProgress]=useState('');
  const [sceneDraft,setSceneDraft]=useState<{sku:string;id:string;text:string}|null>(null);
+ const [styleRevision,setStyleRevision]=useState(0);
  const [stop,setStop]=useState<{requested:boolean;batch:boolean}|null>(null);
  const facts=Object.values(cards).filter(card=>card.kind==='text'&&/^sku-[a-f0-9]{16}-facts$/.test(card.id));
  const existingSkus=facts.map(card=>({prefix:card.id.replace(/-facts$/,''),sku:card.name.split(' · ').slice(0,-1).join(' · ')}));
@@ -148,7 +150,8 @@ export function EcommerceWorkflowPanel({projectId,cards,flush,runTask,activeSku,
    </section>;
   })}
   <EcommerceResizePanel projectId={projectId} cards={cards}/>
-  <EcommerceDeliveryPanel projectId={projectId} cards={cards} activeSku={currentSku?.sku||''} skus={skus.filter(item=>item.prefix).map(item=>({sku:item.sku,prefix:item.prefix,product:skuProducts[item.sku]||''}))}/>
+  <EcommerceStylePanel projectId={projectId} cards={cards} onChanged={()=>setStyleRevision(value=>value+1)}/>
+  <EcommerceDeliveryPanel projectId={projectId} cards={cards} revision={styleRevision} activeSku={currentSku?.sku||''} skus={skus.filter(item=>item.prefix).map(item=>({sku:item.sku,prefix:item.prefix,product:skuProducts[item.sku]||''}))}/>
   {notice&&<p role="status" className="text-xs leading-6 text-green-300">{notice}</p>}
   {error&&<p role="alert" className="text-xs leading-6 text-red-300">{error}</p>}
   {(selected.some(id=>tasks.some(task=>task.id===id&&task.id.includes('-scene-')))||(!!stop&&!stop.batch))&&<div className="sticky -bottom-4 z-10 space-y-2 bg-[var(--beat-surface)] py-3">

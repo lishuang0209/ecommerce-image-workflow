@@ -1,4 +1,5 @@
 import { ecommerceTaskPattern, sceneDescriptionForTask } from './ecommerce-contract';
+import { styleLabel } from './ecommerce-style-presets';
 
 /**
  * Side-by-side delivery view for one product. Columns are its SKUs. The first row is the adopted
@@ -42,6 +43,7 @@ export type DeliveryMatrix = {
 };
 
 export type DeliveryResize = { id: string; url: string; sourceAssetId: string; ratio: string; mode: string };
+export type DeliveryStyle = { id: string; url: string; sourceAssetId: string; preset: string };
 
 export type DeliveryFile = {
   product: string;
@@ -50,6 +52,7 @@ export type DeliveryFile = {
   scene: string;
   ratio: string;
   method: 'original' | 'crop' | 'pad' | 'expand';
+  style: string;
   url: string;
   assetId: string;
   /** Path inside the zip, relative to the product folder (or the zip root when the product has no name). */
@@ -132,37 +135,42 @@ function uniqueFilename(used: Set<string>, folder: string, filename: string) {
   return name;
 }
 
-function fileBase(kind: 'main' | 'scene', scene: string, ratio: string, method: DeliveryFile['method']) {
+function fileBase(kind: 'main' | 'scene', scene: string, ratio: string, method: DeliveryFile['method'], style: string) {
   const head = kind === 'main' ? '主图' : safeDeliverySegment(scene);
   const parts = [head, ratio.replace(':', 'x')];
   if (method !== 'original') parts.push(methodLabel[method]);
+  if (style !== '原图') parts.push(style);
   return `${parts.join('_')}.png`;
 }
 
 /** Files for the current cells, plus resized copies of those same assets when `resized` is non-empty. */
-export function deliveryPackage(matrix: DeliveryMatrix, resized: DeliveryResize[] = []) {
+export function deliveryPackage(matrix: DeliveryMatrix, resized: DeliveryResize[] = [], styled: DeliveryStyle[] = []) {
   const productFolder = matrix.product ? safeDeliverySegment(matrix.product) : '';
   const used = new Set<string>();
   const files: DeliveryFile[] = [];
   const add = (entry: Omit<DeliveryFile, 'relativePath' | 'path' | 'product'> & { sku: string }) => {
     const skuFolder = safeDeliverySegment(entry.sku);
     const folder = productFolder ? `${productFolder}/${skuFolder}` : skuFolder;
-    const filename = uniqueFilename(used, folder, fileBase(entry.kind, entry.scene, entry.ratio, entry.method));
+    const filename = uniqueFilename(used, folder, fileBase(entry.kind, entry.scene, entry.ratio, entry.method, entry.style));
     const relativePath = `${skuFolder}/${filename}`;
     files.push({ ...entry, product: matrix.product, relativePath, path: productFolder ? `${productFolder}/${relativePath}` : relativePath });
   };
   for (const row of matrix.rows) {
     for (const item of row.cells) {
       if (item.missing || !item.url || !item.assetId) continue;
-      add({ sku: item.sku, kind: row.kind, scene: row.scene, ratio: item.ratio, method: 'original', url: item.url, assetId: item.assetId });
+      add({ sku: item.sku, kind: row.kind, scene: row.scene, ratio: item.ratio, method: 'original', style: '原图', url: item.url, assetId: item.assetId });
       const extras = new Map<string, DeliveryResize & { mode: 'crop' | 'pad' | 'expand' }>();
       for (const copy of resized) {
         if (copy.sourceAssetId === item.assetId && copy.url && (copy.mode === 'crop' || copy.mode === 'pad' || copy.mode === 'expand')) extras.set(`${copy.ratio}:${copy.mode}`, { ...copy, mode: copy.mode });
       }
-      for (const copy of extras.values()) add({ sku: item.sku, kind: row.kind, scene: row.scene, ratio: copy.ratio, method: copy.mode, url: copy.url, assetId: copy.id });
+      for (const copy of extras.values()) add({ sku: item.sku, kind: row.kind, scene: row.scene, ratio: copy.ratio, method: copy.mode, style: '原图', url: copy.url, assetId: copy.id });
+      for (const copy of styled) {
+        const label = copy.sourceAssetId === item.assetId ? styleLabel(copy.preset) : '';
+        if (label && copy.url) add({ sku: item.sku, kind: row.kind, scene: row.scene, ratio: item.ratio, method: 'original', style: label, url: copy.url, assetId: copy.id });
+      }
     }
   }
-  const header = ['商品', 'SKU', '类型', '场景名', '画幅', '处理方式', '文件名'];
-  const lines = files.map(file => [file.product, file.sku, file.kind === 'main' ? '主图' : '场景', file.scene, file.ratio, methodLabel[file.method], file.relativePath].map(csvField).join(','));
+  const header = ['商品', 'SKU', '类型', '场景名', '画幅', '处理方式', '风格', '文件名'];
+  const lines = files.map(file => [file.product, file.sku, file.kind === 'main' ? '主图' : '场景', file.scene, file.ratio, methodLabel[file.method], file.style, file.relativePath].map(csvField).join(','));
   return { files, csv: `\uFEFF${[header.join(','), ...lines].join('\n')}\n`, csvPath: productFolder ? `${productFolder}/清单.csv` : '清单.csv' };
 }

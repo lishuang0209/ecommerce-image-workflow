@@ -6,7 +6,7 @@ import { getConfig } from '@/modules/config/service';
 import { isSupportedRasterImage } from '@/lib/image-upload-validation';
 import { bailianOrigin, bailianOutputUrl, downloadBailianOutput } from './bailian-image';
 import { isExpandRatio } from './image-expand';
-import { resizeTargets, type ResizeRatio } from './image-resize';
+import { resizeTargets, type ResizeRatio } from './image-resize-targets';
 
 const codeOf = (value: unknown) => String(value || 'unknown').replace(/[^a-zA-Z0-9_.-]/g, '').slice(0, 80);
 

@@ -2,14 +2,16 @@ import { useEffect, useState } from 'react';
 import type { CanvasCard } from '@/core/beatcanvas/canvas-types';
 import { apiJsonGet } from '@/lib/api-client';
 import { useTranslations } from '@/core/workspace-lib/shims/next-intl';
-import { buildDeliveryMatrix, deliveryPackage, safeDeliverySegment, type DeliveryColumn, type DeliveryResize } from '@/core/demo/ecommerce-delivery';
+import { buildDeliveryMatrix, deliveryPackage, safeDeliverySegment, type DeliveryColumn, type DeliveryResize, type DeliveryStyle } from '@/core/demo/ecommerce-delivery';
 import { skuLabel } from './ecommerce-material-library';
 
 /** Current finished images for one product, compared by SKU and downloaded with a manifest. No model call. */
-export function EcommerceDeliveryPanel({ projectId, cards, skus, activeSku }: { projectId: string; cards: Record<string, CanvasCard>; skus: DeliveryColumn[]; activeSku: string }) {
+export function EcommerceDeliveryPanel({ projectId, cards, skus, activeSku, revision = 0 }: { projectId: string; cards: Record<string, CanvasCard>; skus: DeliveryColumn[]; activeSku: string; revision?: number }) {
   const t = useTranslations('AppShell.studio.ecommerce');
   const [includeResized, setIncludeResized] = useState(false);
+  const [includeStyled, setIncludeStyled] = useState(false);
   const [derived, setDerived] = useState<DeliveryResize[]>([]);
+  const [styled, setStyled] = useState<DeliveryStyle[]>([]);
   const [selected, setSelected] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -18,9 +20,12 @@ export function EcommerceDeliveryPanel({ projectId, cards, skus, activeSku }: { 
   const columns = skus.filter(item => item.prefix && (product ? item.product === product : item.sku === activeSku));
   const matrix = buildDeliveryMatrix(columns, cards);
   const ready = matrix.rows.some(row => row.kind === 'scene' || row.cells.some(cell => !cell.missing));
-  const pack = deliveryPackage(matrix, includeResized ? derived : []);
+  const pack = deliveryPackage(matrix, includeResized ? derived : [], includeStyled ? styled : []);
   const chosen = matrix.rows.flatMap(row => row.cells.map(cell => ({ row, cell }))).find(item => `${item.row.key}:${item.cell.sku}` === selected && !item.cell.missing);
-  useEffect(() => { void apiJsonGet<{ derived: DeliveryResize[] }>(`/api/demo/ecommerce-resize?projectId=${projectId}`).then(result => setDerived(result.derived)).catch(() => undefined); }, [projectId]);
+  useEffect(() => {
+    void apiJsonGet<{ derived: DeliveryResize[] }>(`/api/demo/ecommerce-resize?projectId=${projectId}`).then(result => setDerived(result.derived)).catch(() => undefined);
+    void apiJsonGet<{ styled: DeliveryStyle[] }>(`/api/demo/ecommerce-style?projectId=${projectId}`).then(result => setStyled(result.styled)).catch(() => undefined);
+  }, [projectId, revision]);
   async function download() {
     setBusy(true); setError('');
     try {
@@ -58,6 +63,7 @@ export function EcommerceDeliveryPanel({ projectId, cards, skus, activeSku }: { 
       </div>
       {chosen?.cell.url && <figure className="space-y-2"><img src={chosen.cell.url} alt={chosen.row.kind === 'main' ? t('deliveryMain') : chosen.row.scene} className="max-h-80 w-full rounded-lg bg-white object-contain" /><figcaption className="flex items-center justify-between text-[11px] text-[var(--beat-text-3)]"><span>{chosen.cell.sku} · {chosen.row.kind === 'main' ? t('deliveryMain') : chosen.row.scene} · {chosen.cell.ratio}</span><a className="text-orange-400" href={chosen.cell.url} target="_blank" rel="noreferrer">{t('viewImage')}</a></figcaption></figure>}
       <label className="flex min-h-10 items-center gap-2 text-xs"><input type="checkbox" checked={includeResized} onChange={event => setIncludeResized(event.target.checked)} />{t('deliveryIncludeResized')}</label>
+      <label className="flex min-h-10 items-center gap-2 text-xs"><input type="checkbox" checked={includeStyled} onChange={event => setIncludeStyled(event.target.checked)} />{t('deliveryIncludeStyled')}</label>
       <button type="button" disabled={busy || !pack.files.length} className="min-h-10 w-full rounded-lg border border-white/20 text-xs disabled:opacity-40" onClick={() => void download()}>{busy ? t('taskRunningShort') : t('deliveryDownload')}</button>
     </>}
     {error && <p role="alert" className="text-xs leading-6 text-red-300">{error}</p>}

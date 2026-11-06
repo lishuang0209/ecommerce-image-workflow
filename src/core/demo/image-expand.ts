@@ -1,4 +1,4 @@
-import { resizeTargets, type ResizeRatio } from './image-resize';
+import { resizeTargets, type ResizeRatio } from './image-resize-targets';
 
 /** The outpainting model keeps the source centred and refuses more than a 3× extension on either axis. */
 export const EXPAND_SCALE_LIMIT = 3;

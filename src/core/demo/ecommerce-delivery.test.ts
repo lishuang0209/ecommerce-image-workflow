@@ -62,8 +62,8 @@ test('the manifest lists current images and adds resized copies only when they a
   const plain = deliveryPackage(matrix);
   assert.deepEqual(plain.files.map(file => file.relativePath), ['白色/主图_1x1.png', '白色/城市-街头_4x5.png']);
   assert.equal(plain.csvPath, "Nike Air Force 1 '07/清单.csv");
-  assert.ok(plain.csv.startsWith('\uFEFF商品,SKU,类型,场景名,画幅,处理方式,文件名\n'));
-  assert.ok(plain.csv.includes(",主图,,1:1,原图,白色/主图_1x1.png"));
+  assert.ok(plain.csv.startsWith('\uFEFF商品,SKU,类型,场景名,画幅,处理方式,风格,文件名\n'));
+  assert.ok(plain.csv.includes(",主图,,1:1,原图,原图,白色/主图_1x1.png"));
   const packed = deliveryPackage(matrix, [
     { id: 'old-size', url: '/old.png', sourceAssetId: 'not-current', ratio: '9:16', mode: 'pad' },
     { id: 'size-1', url: '/size-1.png', sourceAssetId: 'main-w', ratio: '3:4', mode: 'crop' },
@@ -71,7 +71,10 @@ test('the manifest lists current images and adds resized copies only when they a
   ]);
   assert.deepEqual(packed.files.map(file => file.relativePath), ['白色/主图_1x1.png', '白色/主图_3x4_居中裁剪.png', '白色/城市-街头_4x5.png']);
   assert.equal(packed.files[1].url, '/size-2.png');
-  assert.ok(packed.csv.includes('居中裁剪,白色/主图_3x4_居中裁剪.png'));
+  assert.ok(packed.csv.includes('居中裁剪,原图,白色/主图_3x4_居中裁剪.png'));
+  const withStyle = deliveryPackage(matrix, [], [{ id: 'warm', url: '/warm.png', sourceAssetId: 'main-w', preset: 'warm' }]);
+  assert.ok(withStyle.files.some(file => file.relativePath === '白色/主图_1x1_暖色棚拍.png'));
+  assert.ok(withStyle.csv.includes('原图,暖色棚拍,白色/主图_1x1_暖色棚拍.png'));
 });
 
 test('filenames that sanitise to the same name get a numeric suffix', () => {

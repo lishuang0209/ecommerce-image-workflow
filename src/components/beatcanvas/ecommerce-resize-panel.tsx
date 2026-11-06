@@ -4,7 +4,7 @@ import { apiJsonDelete, apiJsonGet, apiJsonPost } from '@/lib/api-client';
 import { useTranslations } from '@/core/workspace-lib/shims/next-intl';
 import { adoptedMainSkuName, ecommerceTaskPattern } from '@/core/demo/ecommerce-contract';
 import { expandRatios } from '@/core/demo/image-expand';
-import { resizeRatios } from '@/core/demo/image-resize';
+import { resizeRatios } from '@/core/demo/image-resize-targets';
 type Derived = { id: string; url: string; sourceAssetId: string; ratio: string; mode: string; sku: string; task: string; filename: string };
 
 /** Batch size change for finished results. Local crop / padding only: no model call, no cost. */
