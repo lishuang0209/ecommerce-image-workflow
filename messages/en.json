@@ -544,6 +544,7 @@
         "applyPhotoFields": "Apply SKU, role and shot type to checked photos",
         "selectSkuFirst": "Choose or create a SKU before adding photos.",
         "skuExists": "This SKU already exists. Select it from the list.",
+        "skuTakenByOtherProduct": "This name is already used by \"{product}\". Choose another, e.g. \"Product-Colour\".",
         "sceneMainTitle": "Listing image for this scene",
         "sceneMainReady": "Listing adopted and connected",
         "sceneMainHint": "Confirm this listing as the product reference. This only saves and connects it; no model call or charge.",

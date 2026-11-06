@@ -3,7 +3,7 @@ import {EcommerceSelect} from './ecommerce-select';
 import type {RecentAsset} from '@/core/workspace-lib/app/workspace-client-api';
 import {useQuery,useQueryClient} from '@tanstack/react-query';
 import {recentAssetsKeys} from '@/core/workspace-lib/app/workspace-query-keys';
-import {EcommerceMaterialLibrary,type SavedEcommerceMaterial} from './ecommerce-material-library';
+import {EcommerceMaterialLibrary,skuLabel,type SavedEcommerceMaterial} from './ecommerce-material-library';
 import {EcommerceWorkflowPanel} from './ecommerce-workflow-panel';
 import {groupEcommerceMaterials,type EcommerceProfile} from '@/core/demo/ecommerce-profiles';
 import {Suspense,lazy,useEffect,useRef,useState,type ChangeEvent} from 'react';
@@ -14,6 +14,7 @@ import {useTranslations} from '@/core/workspace-lib/shims/next-intl';
 
 const ProjectAssetPicker=lazy(()=>import('./beatcanvas-sidebar-panels').then(mod=>({default:mod.HistoryPanel})));
 type Material={id:string;file:File;preview:string;sku:string;role:'product'|'style';shot:''|'front'|'detail'|'scene';uploaded:boolean;bound:boolean;selected:boolean};
+
 export function EcommerceMaterialPanel({projectId,cards,flush,runTask,onCreateNode,onInsertAsset,onSavedSnapshot,onLocateSku,onLocateCard}:{onLocateCard?:(id:string)=>void;onLocateSku?:(sku:string)=>void;onSavedSnapshot:(document:import('@/core/projects/project-snapshot').ProjectSnapshotDocument,version:number)=>void;onCreateNode?:(type:'image'|'text')=>void;onInsertAsset?:(asset:RecentAsset&{mediaType:'image'|'video'|'audio'})=>void;projectId:string;cards:Record<string,CanvasCard>;flush:()=>Promise<void>;runTask:(id:string)=>Promise<boolean>}){
  const t=useTranslations('AppShell.studio.ecommerce');
  const [panel,setPanel]=useState<'library'|'import'|'workflow'|'nodes'|null>(cards['ecommerce-start']?'import':null);
@@ -54,7 +55,8 @@ export function EcommerceMaterialPanel({projectId,cards,flush,runTask,onCreateNo
    if(!target)throw new Error(t('selectSkuFirst'));
    const frozenSku=files.find(item=>item.uploaded)?.sku;
    if(frozenSku&&frozenSku!==target)throw new Error(t('missingSku'));
-   if(!sku&&frozenSku!==target&&savedGroups.some(group=>group.sku===target))throw new Error(t('skuExists'));
+   const existing=!sku&&frozenSku!==target?savedGroups.find(group=>group.sku===target):undefined;
+   if(existing)throw new Error(existing.product&&existing.product!==product.trim()?t('skuTakenByOtherProduct',{product:existing.product}):t('skuExists'));
    const importProfiles=sku?allProfiles:{...allProfiles,[target]:{sku:target,product:product.trim(),color:color.trim(),preserve:preserve.trim(),conflicting:false}};
    if(!sku)setProfiles(current=>({...current,[target]:importProfiles[target]}));
    for(const item of files){if(!item.uploaded)item.sku=target;}
@@ -87,7 +89,7 @@ export function EcommerceMaterialPanel({projectId,cards,flush,runTask,onCreateNo
  const importTarget=sku||newSku.trim();
  const partiallySaved=files.some(item=>item.uploaded);
  function choosePanel(value:'library'|'import'|'workflow'|'nodes'){if(value==='import'&&!files.length&&!newSku){setImportSkuTouched(false);setSku(currentProductSku);}setPanel(current=>current===value?null:value);}
- const skuOptions=Object.values(allProfiles).map(profile=><option key={profile.sku} value={profile.sku}>{profile.sku}</option>);
+ const skuOptions=Object.values(allProfiles).map(profile=><option key={profile.sku} value={profile.sku}>{skuLabel(profile)}</option>);
  return <div className="pointer-events-auto absolute left-4 top-4 z-40 w-[440px] max-w-[calc(100%_-_32px)] text-[var(--beat-text-1)]">
   <nav aria-label={t('canvasTools')} className="inline-flex max-w-full flex-wrap items-center gap-1 rounded-xl border border-white/15 bg-[var(--beat-surface)] p-1 shadow-lg">
    {(['library','import','workflow','nodes']as const).map(value=><button key={value} type="button" aria-expanded={panel===value} aria-controls="ecommerce-tool-panel" className={'min-h-10 rounded-lg px-3 text-xs transition-colors '+(panel===value?'bg-white/10 text-white':'text-[var(--beat-text-2)] hover:bg-white/5')} onClick={()=>choosePanel(value)}>{t(value==='library'?'libraryEntry':value==='import'?'importEntry':value==='nodes'?'addNode':'workflowTab')}</button>)}

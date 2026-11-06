@@ -544,6 +544,7 @@
         "applyPhotoFields": "所属SKU・用途・撮影タイプを選択画像に適用",
         "selectSkuFirst": "SKUを選択または作成してから画像を追加してください。",
         "skuExists": "このSKUは既に存在します。一覧から選択してください。",
+        "skuTakenByOtherProduct": "この名前は「{product}」で使用済みです。「商品略称-色」など別の名前にしてください。",
         "sceneMainTitle": "シーンに使う主画像",
         "sceneMainReady": "主画像を採用・接続済み",
         "sceneMainHint": "商品主体の参照画像として確認します。保存と接続のみで、モデル呼び出しや課金はありません。",

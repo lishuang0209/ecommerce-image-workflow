@@ -544,6 +544,7 @@
         "applyPhotoFields": "将所属 SKU、用途和拍摄类型应用到勾选图片",
         "selectSkuFirst": "请先选择或新建 SKU，再添加图片。",
         "skuExists": "该 SKU 已存在，请从下拉框选择。",
+        "skuTakenByOtherProduct": "这个名称已被「{product}」使用，请换一个，例如「商品简称-颜色」。",
         "sceneMainTitle": "场景使用的主图",
         "sceneMainReady": "主图已采用并连接",
         "sceneMainHint": "确认这张主图作为商品主体参考。仅保存与连接，不会调用模型或产生费用。",

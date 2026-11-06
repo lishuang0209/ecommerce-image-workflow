@@ -7,6 +7,8 @@ import type {RecentAsset} from '@/core/workspace-lib/app/workspace-client-api';
 import {uniqueContentMaterials,groupEcommerceMaterials,type EcommerceMaterial} from '@/core/demo/ecommerce-profiles';
 export type SavedEcommerceMaterial=EcommerceMaterial;
 
+export const skuLabel=(group:{sku:string;product?:string})=>group.product?`${group.product} · ${group.sku}`:group.sku;
+
 export function EcommerceMaterialLibrary({projectId,materials,onSaved,flush,disabled,renderResults,onPlaceMaterial,activeSku,onSkuChange,onLocateSku,onDeleteAssets,onPlaceResult}:{onPlaceResult?:(asset:RecentAsset)=>void;onDeleteAssets?:(body:{assetIds?:string[];sku?:string})=>Promise<number|null>;activeSku:string;onSkuChange:(sku:string)=>void;onLocateSku?:()=>void;projectId:string;materials:SavedEcommerceMaterial[];onSaved:()=>Promise<unknown>;flush:()=>Promise<void>;disabled:boolean;renderResults?:(sku:string,onDelete:(assetId:string)=>void,onOpen:(asset:RecentAsset)=>void)=>ReactNode;onPlaceMaterial?:(material:SavedEcommerceMaterial)=>void}){
  const t=useTranslations('AppShell.studio.ecommerce');
  const [tab,setTab]=useState<'references'|'results'>('references');
@@ -34,7 +36,7 @@ export function EcommerceMaterialLibrary({projectId,materials,onSaved,flush,disa
   catch(cause){setError(cause instanceof Error?cause.message:t('failed'));}finally{setBusy(false);}
  }
  return <section aria-label={t('libraryTitle')} className="space-y-3">
-  {group&&<label className="block text-xs text-[var(--beat-text-3)]">{t('currentWorkflowSku')}<EcommerceSelect disabled={busy} className={input} value={group.sku} onChange={event=>{onSkuChange(event.target.value);setDetailId(null);setProfile(null);setShowProfile(false);setShowDuplicates(false);setError('');setNotice('');}}>{groups.map(item=><option key={item.sku} value={item.sku}>{item.sku}</option>)}</EcommerceSelect></label>}
+  {group&&<label className="block text-xs text-[var(--beat-text-3)]">{t('currentWorkflowSku')}<EcommerceSelect disabled={busy} className={input} value={group.sku} onChange={event=>{onSkuChange(event.target.value);setDetailId(null);setProfile(null);setShowProfile(false);setShowDuplicates(false);setError('');setNotice('');}}>{groups.map(item=><option key={item.sku} value={item.sku}>{skuLabel(item)}</option>)}</EcommerceSelect></label>}
   {onLocateSku&&<button type="button" className="min-h-10 text-xs text-[var(--beat-text-3)] hover:text-white" onClick={onLocateSku}>{t('locateSkuWorkflow')} →</button>}
   <div role="tablist" aria-label={t('libraryViews')} className="grid grid-cols-2 rounded-lg bg-white/5 p-1">{(['references','results']as const).map(value=><button key={value} type="button" role="tab" id={'material-tab-'+value} aria-controls="material-view" aria-selected={tab===value} className={'min-h-10 rounded-md text-xs '+(tab===value?'bg-white/10 text-white':'text-[var(--beat-text-3)]')} onClick={()=>{setTab(value);setDetailId(null);setResult(null);setShowProfile(false);}}>{t(value==='references'?'referenceMaterials':'generatedResults')}</button>)}</div>
   <div id="material-view" role="tabpanel" aria-labelledby={'material-tab-'+tab}>
