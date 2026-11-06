@@ -34,7 +34,7 @@ ShortFilm Agent 是一个**可二次开发的 AIGC 项目底座**。用户输入
 
 内置 5 个开箱即用的场景：
 
-<table>
+<table width="100%">
   <thead>
     <tr>
       <th align="left" width="25%">内置场景</th>
