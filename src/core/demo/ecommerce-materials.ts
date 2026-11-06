@@ -13,13 +13,18 @@ import { getProjectAssetById } from '@/core/workspace-lib/assets/user-assets';
 
 export const skuNodePrefix = (sku: string) => `sku-${createHash('sha256').update(sku).digest('hex').slice(0,16)}`;
 /** Copies another SKU's detailed scene prompt, swapping its colour word for this SKU's colour; null when it cannot be done safely. */
-function copiedScenePrompt(cards:Map<string,CanvasCard>,assets:{metadata:unknown}[],sourceId?:string){
+/** Copies another SKU's scene prompt, swapping its colour and SKU name for this SKU's; null when nothing can be swapped safely. */
+function copiedScenePrompt(cards:Map<string,CanvasCard>,assets:{metadata:unknown}[],sku:string,sourceId?:string){
  if(!sourceId||!/^sku-[a-f0-9]{16}-scene-[A-Za-z0-9]+-prompt$/.test(sourceId))return null;
  const source=cards.get(sourceId),text=source?.kind==='text'?source.textContent?.trim():'';
- const facts=cards.get(sourceId.replace(/-scene-.*$/,'-facts')),from=facts?.kind==='text'?/确认颜色：([^；\n]+)/.exec(facts.textContent||'')?.[1]?.trim():'';
- const to=assets.map(asset=>ecommerceTag(asset.metadata)?.color?.trim()).find(Boolean);
- if(!text||text===pendingEcommercePrompt||!from||!to||!text.includes(from))return null;
- return text.split(from).join(to);
+ if(!text||text===pendingEcommercePrompt)return null;
+ const facts=cards.get(sourceId.replace(/-scene-.*$/,'-facts')),factsText=facts?.kind==='text'?facts.textContent||'':'';
+ const pairs=[
+  [/确认颜色：([^；\n]+)/.exec(factsText)?.[1]?.trim(),assets.map(asset=>ecommerceTag(asset.metadata)?.color?.trim()).find(Boolean)],
+  [/SKU：([^；\n]+)/.exec(factsText)?.[1]?.trim(),sku],
+ ].filter((pair):pair is [string,string]=>!!pair[0]&&!!pair[1]&&pair[0]!==pair[1]&&text.includes(pair[0]));
+ if(!pairs.length)return null;
+ return pairs.reduce((result,[from,to])=>result.split(from).join(to),text);
 }
 /** Directly under the SKU facts card, in the same column. */
 const legacyFactsLines=/\n?商品名称、型号与容量：请核对后填写，未确认的规格不应补写。|\n?素材标签会在生成时自动读取；请在此补充其他商品事实。/g;
@@ -101,7 +106,7 @@ export async function bindEcommerceMaterials({projectId,sku,action='import',asse
   // Scenes that already have a separate brief node keep that two-node structure and its review reset.
   const legacyBrief=cards.has(briefId);
   if(legacyBrief)operations.push({type:'upsert_text',cardId:briefId,name:`${sku} · 场景要求`,textContent:description,frame:state.snapshot.frames[briefId]??{x:-40,y:sceneY,w:400,h:240}});
-  const prompt={...buildTextCard({id:promptId,name:`${sku} · ${label}提示词`,textContent:legacyBrief?pendingEcommercePrompt:copiedScenePrompt(cards,assets,copyPromptFrom)||description}),referenceCardIds:legacyBrief?[factsId,briefId]:[factsId]};
+  const prompt={...buildTextCard({id:promptId,name:`${sku} · ${label}提示词`,textContent:legacyBrief?pendingEcommercePrompt:copiedScenePrompt(cards,assets,sku,copyPromptFrom)||description}),referenceCardIds:legacyBrief?[factsId,briefId]:[factsId]};
   operations.push({type:'upsert_card',card:prompt,frame:state.snapshot.frames[promptId]??{x:420,y:sceneY,w:400,h:400}});
   const adoptedId=`${prefix}-adopted-main`;
   const generation:CanvasGenerationCard={...(existing?.kind==='generation'?existing:buildTextCard({id,name:''})),id,kind:'generation',type:'image',name:`${sku} · ${label}`,modelId:'qwen-image-2.1',aspectRatio:'4:5',outputQuality:'1k',prompt:'',referenceCardIds:[promptId,...(cards.has(adoptedId)?[adoptedId]:[]),...assets.filter(asset=>ecommerceTag(asset.metadata)?.role==='style').map(asset=>`sku-asset-${asset.id}`)]};

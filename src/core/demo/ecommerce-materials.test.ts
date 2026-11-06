@@ -85,6 +85,17 @@ test('SKU workflow persists explicit adoption and composition-only master withou
   assert.equal(cards.find(card=>card.id===gp+'-master-reference')?.assetId,main);
   assert.ok(cards.find(card=>card.id===gp+'-main-image')?.referenceCardIds.includes(gp+'-composition-template'));
  }
+ {
+  // Without a colour field, copying a scene prompt swaps the SKU name instead of silently dropping the prompt.
+  const before=await snapshot(),scenePrompt=before.snapshot.cards.find(card=>card.id===bp+'-scene-abcdef0123456789-prompt')!,facts=before.snapshot.cards.find(card=>card.id===bp+'-facts')!;
+  const id=randomUUID();
+  assert.ok((await persistBeatDesignCommand({projectId:project.id,origin:'ui',commandId:id,idempotencyKey:id,expectedRevision:before.snapshotVersion,command:{type:'canvas.apply',operations:[{type:'upsert_card',card:{...scenePrompt,textContent:'任务：生活场景图。背景必须重绘为：城市街头。\n商品身份与保真要求：SKU：Black。'}},{type:'upsert_card',card:{...facts,textContent:'SKU：Black'}}]}})).ok);
+  await bind(grey,{action:'scene',sceneDescription:'城市街头',copyPromptFrom:bp+'-scene-abcdef0123456789-prompt'});
+  const copied=(await snapshot()).snapshot.cards.find(card=>card.kind==='text'&&card.id.startsWith(gp+'-scene-')&&card.id.endsWith('-prompt'));
+  assert.ok(copied?.kind==='text'&&copied.textContent.includes('背景必须重绘为：城市街头')&&copied.textContent.includes('SKU：Grey')&&!copied.textContent.includes('Black'));
+  const after=await snapshot(),restore=randomUUID();
+  assert.ok((await persistBeatDesignCommand({projectId:project.id,origin:'ui',commandId:restore,idempotencyKey:restore,expectedRevision:after.snapshotVersion,command:{type:'canvas.apply',operations:[{type:'upsert_card',card:facts},{type:'upsert_card',card:scenePrompt}]}})).ok);
+ }
  // A different product, or a SKU without a product name, can never borrow this composition or its scenes.
  const other='Lipstick',bare='Unnamed';
  await asset(other,false,'Lipstick');await asset(bare,false,null);
@@ -99,8 +110,8 @@ test('SKU workflow persists explicit adoption and composition-only master withou
  assert.equal(state.snapshot.cards.find(card=>card.id===bp+'-adopted-main')?.assetId,main);
  assert.equal(state.snapshot.cards.find(card=>card.id===wp+'-master-reference')?.assetId,main);
  assert.ok(state.snapshot.cards.find(card=>card.id===wp+'-main-image')?.referenceCardIds.includes(wp+'-master-reference'));
- // Two black scenes + two white scenes + five main images (grey and the two product-check SKUs included).
- assert.equal(state.snapshot.cards.filter(card=>card.kind==='generation').length,9);
+ // Two black scenes + two white scenes + five main images and one grey scene.
+ assert.equal(state.snapshot.cards.filter(card=>card.kind==='generation').length,10);
  // Marking a new master must not change an already applied concrete reference.
  const nextMain=await asset(black,true);
  await bind(black,{action:'adopt',assetId:nextMain});
