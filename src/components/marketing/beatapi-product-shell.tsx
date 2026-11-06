@@ -5,9 +5,9 @@ import {
 import { useState, type ReactNode } from 'react';
 
 import { LanguageSwitcher } from '@/components/app/language-switcher';
+import { EcommerceBrandMark } from '@/components/app/ecommerce-brand-mark';
 import { normalizeLocale } from '@/config/locale';
 import { Link } from '@/core/i18n/navigation';
-import { appConfig } from '@/config';
 import { m } from '@/paraglide/messages.js';
 
 type ProductSurface = 'home' | 'projects';
@@ -32,6 +32,7 @@ function getShellCopy(locale: string) {
     ),
     terms: m['product.shell.terms']({}, { locale: messageLocale }),
     privacy: m['product.shell.privacy']({}, { locale: messageLocale }),
+    brand: m['product.shell.brand']({}, { locale: messageLocale }),
   };
 }
 
@@ -50,19 +51,15 @@ const activeNavHref: Record<ProductSurface, string> = {
   projects: '/projects',
 };
 
-export function Brand({ href = '/' }: { href?: string }) {
+export function Brand({ href = '/', name }: { href?: string; name: string }) {
   return (
     <Link
       href={href}
-      aria-label={`${appConfig.app_name} home`}
+      aria-label={`${name} home`}
       className="beat-product-display inline-flex min-w-0 items-center gap-2.5 text-[15px] font-semibold tracking-[-0.02em] text-[#f6f6f4] sm:text-base"
     >
-      <img
-        src={appConfig.app_logo}
-        alt=""
-        className="size-7 shrink-0 rounded-[9px] object-contain"
-      />
-      <span className="truncate">{appConfig.app_name}</span>
+      <EcommerceBrandMark />
+      <span className="truncate">{name}</span>
     </Link>
   );
 }
@@ -118,7 +115,7 @@ export function BeatApiProductShell({
     >
       <header className="sticky top-3 z-40 px-4 sm:top-4 sm:px-6">
         <div className="mx-auto flex h-[60px] w-full min-w-0 max-w-[1280px] items-center gap-3 rounded-full border border-white/[0.08] bg-[#131416]/90 px-3.5 shadow-[0_18px_60px_rgba(0,0,0,0.36)] backdrop-blur-2xl sm:px-5">
-          <Brand />
+          <Brand name={copy.brand} />
 
           <CapsuleNav active={active} items={navItems} />
 

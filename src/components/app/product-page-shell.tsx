@@ -2,6 +2,8 @@ import type { ReactNode } from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Images, Scissors, Workflow } from 'lucide-react';
 
+import { EcommerceBrandMark } from '@/components/app/ecommerce-brand-mark';
+
 import { WorkspaceApiConfigDialog } from '@/components/app/workspace-api-config-dialog';
 import { ProjectSettingsDialog } from './project-settings-dialog';
 import { fetchProjectSettings, saveProjectSettings } from '@/core/workspace-lib/app/project-settings-client';
@@ -12,7 +14,6 @@ import { GitHubIcon } from '@/components/icons/github';
 import { Link } from '@/core/i18n/navigation';
 import { useTranslations } from '@/core/workspace-lib/shims/next-intl';
 import { ApiError, apiJsonPost } from '@/lib/api-client';
-import { appConfig } from '@/config';
 import { ACTIVE_GENERATION_PROVIDER_ID } from '@/config/generation-providers';
 import type { WorkspaceMode } from '@/config/workspace-modes';
 
@@ -143,11 +144,7 @@ export function ProductPageShell({
                 aria-label={t('header.backHome')}
                 className="inline-flex size-9 items-center justify-center rounded-xl text-[var(--beat-text-1)] transition hover:bg-white/[0.06]"
               >
-                <img
-                  src={appConfig.app_logo}
-                  alt={appConfig.app_name}
-                  className="size-7 rounded-xl object-contain"
-                />
+                <EcommerceBrandMark />
               </Link>
 
               <div className="hidden min-w-0 flex-1 sm:block">

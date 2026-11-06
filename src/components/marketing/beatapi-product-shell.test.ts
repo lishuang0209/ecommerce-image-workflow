@@ -11,6 +11,9 @@ test('product shell keeps workspace navigation and hides SaaS auth', () => {
   assert.match(source, /label: copy\.home, href: '\/'/);
   assert.match(source, /label: copy\.create, href: '\/canvas'/);
   assert.match(source, /href: '\/projects'/);
+  assert.match(source, /EcommerceBrandMark/);
+  assert.match(source, /product\.shell\.brand/);
+  assert.doesNotMatch(source, /appConfig\.app_name/);
   assert.doesNotMatch(source, /href: '\/pricing'/);
   assert.doesNotMatch(source, /ProductSurface.*pricing/);
   assert.doesNotMatch(source, /href="\/sign-in"/);
