@@ -148,6 +148,9 @@ export function EcommerceVideoPanel({
           idea: text,
           locale,
         });
+        // Refresh now so the session id is known and the polling loop starts
+        // while the (long) script run is in flight.
+        await refresh();
       }
       const result = await apiJsonPost<RunResult>('/api/demo/ecommerce-video', {
         projectId,
@@ -222,6 +225,11 @@ export function EcommerceVideoPanel({
   const stages: VideoStageView[] = state?.stages?.length
     ? state.stages
     : SHORTFILM_STAGES.map((stage) => ({ ...stage, status: 'pending' }));
+  const scriptStage = stages.find((stage) => stage.id === SHORTFILM_SCRIPT_STAGE);
+  const scriptRunning = scriptStage?.status === 'running';
+  const runningPercent =
+    typeof scriptStage?.progress === 'number' ? scriptStage.progress : null;
+  const runningMessage = scriptStage?.message ?? null;
   const fallbackText =
     script && !script.episodes?.length
       ? script.original_text || script.meta?.original_text || ''
@@ -380,6 +388,40 @@ export function EcommerceVideoPanel({
                 {t('videoScriptEmpty')}
               </p>
             )}
+
+            {busy ? (
+              <div
+                role="status"
+                aria-live="polite"
+                className="rounded-lg border border-white/10 bg-white/[0.03] p-3"
+              >
+                <div className="flex items-center gap-2 text-xs text-white/85">
+                  <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
+                  {scriptRunning
+                    ? t('videoGeneratingLabel')
+                    : t('videoStartingLabel')}
+                  {runningPercent != null ? (
+                    <span className="tabular-nums text-white/50">{runningPercent}%</span>
+                  ) : null}
+                </div>
+                {runningPercent != null ? (
+                  <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/10">
+                    <div
+                      className="h-full rounded-full bg-[var(--beat-accent)] transition-[width] duration-500"
+                      style={{ width: `${Math.max(0, Math.min(100, runningPercent))}%` }}
+                    />
+                  </div>
+                ) : null}
+                {runningMessage ? (
+                  <p className="mt-1.5 truncate text-[11px] text-white/55">
+                    {runningMessage}
+                  </p>
+                ) : null}
+                <p className="mt-1 text-[10px] leading-4 text-white/40">
+                  {t('videoWaitHint')}
+                </p>
+              </div>
+            ) : null}
 
             <div className="flex flex-wrap gap-2">
               <button

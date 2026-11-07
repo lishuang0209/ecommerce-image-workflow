@@ -11,9 +11,7 @@ export async function createCreativeCanvas({ name, template, locale }: { name: s
     const facts = buildTextCard({
       id: SHORTFILM_FACTS_CARD_ID,
       name: zh ? '商品信息' : 'Product brief',
-      textContent: zh
-        ? '在这里写商品名称、核心卖点、目标人群和投放平台。左侧「电商视频」面板会读取这段信息生成广告脚本。'
-        : 'Write the product name, selling points, audience and target platform here. The Ecommerce video panel on the left uses this brief to generate the ad script.',
+      textContent: '',
       textRole: 'note',
     });
     snapshot.cards.push(facts);
