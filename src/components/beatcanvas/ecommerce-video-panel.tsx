@@ -299,15 +299,27 @@ export function EcommerceVideoPanel({
               {t('videoIntro')}
             </p>
           </div>
-          <span
-            className={`shrink-0 rounded-full border px-2 py-1 text-[10px] ${
-              state?.connected
-                ? 'border-green-400/30 text-green-300'
-                : 'border-white/15 text-white/45'
-            }`}
-          >
-            {state?.connected ? t('videoServiceOnline') : t('videoServiceUnknown')}
-          </span>
+          <div className="flex shrink-0 items-center gap-2">
+            <button
+              type="button"
+              disabled={busy}
+              aria-label={t('videoRefresh')}
+              title={t('videoRefresh')}
+              className="flex min-h-8 w-8 items-center justify-center rounded-lg border border-white/15 text-white/60 hover:bg-white/5 disabled:opacity-40"
+              onClick={() => void refresh().catch(() => undefined)}
+            >
+              <RefreshCw className="size-3.5" aria-hidden="true" />
+            </button>
+            <span
+              className={`shrink-0 rounded-full border px-2 py-1 text-[10px] ${
+                state?.connected
+                  ? 'border-green-400/30 text-green-300'
+                  : 'border-white/15 text-white/45'
+              }`}
+            >
+              {state?.connected ? t('videoServiceOnline') : t('videoServiceUnknown')}
+            </span>
+          </div>
         </header>
 
         {loading ? (
@@ -398,7 +410,8 @@ export function EcommerceVideoPanel({
             </ol>
 
             {script ? (
-              <details open className="rounded-lg border border-white/10">
+              <section className="rounded-lg border border-white/10">
+                <details open>
                 <summary className="flex min-h-9 cursor-pointer items-center gap-2 px-3 py-2 text-xs font-medium">
                   <CheckCircle2 className="size-3.5 text-green-300" aria-hidden="true" />
                   {t('videoScriptTitle')}
@@ -430,11 +443,42 @@ export function EcommerceVideoPanel({
                     </pre>
                   ) : null}
                 </div>
-              </details>
+                </details>
+                <div className="flex gap-2 border-t border-white/10 p-2">
+                  <button
+                    type="button"
+                    disabled={busy || offline}
+                    className="min-h-10 flex-1 rounded-lg bg-[var(--beat-accent)] px-3 text-xs font-medium text-black disabled:opacity-40"
+                    onClick={() => void runScript()}
+                  >
+                    {busy ? t('videoStatusRunning') : t('videoRerunScript')}
+                  </button>
+                  {canContinue ? (
+                    <button
+                      type="button"
+                      disabled={busy || offline}
+                      className="min-h-10 flex-1 rounded-lg border border-white/20 px-3 text-xs hover:bg-white/5 disabled:opacity-40"
+                      onClick={() => void continueWorkflow(SHORTFILM_SCRIPT_STAGE)}
+                    >
+                      {t('videoConfirmContinue')}
+                    </button>
+                  ) : null}
+                </div>
+              </section>
             ) : (
-              <p className="rounded-lg border border-dashed border-white/15 px-3 py-4 text-[11px] leading-5 text-white/45">
-                {t('videoScriptEmpty')}
-              </p>
+              <div className="space-y-2 rounded-lg border border-dashed border-white/15 p-3">
+                <p className="text-[11px] leading-5 text-white/45">
+                  {t('videoScriptEmpty')}
+                </p>
+                <button
+                  type="button"
+                  disabled={busy || offline}
+                  className="min-h-10 w-full rounded-lg bg-[var(--beat-accent)] px-3 text-xs font-medium text-black disabled:opacity-40"
+                  onClick={() => void runScript()}
+                >
+                  {busy ? t('videoStatusRunning') : t('videoRunScript')}
+                </button>
+              </div>
             )}
 
             {scriptConfirmed ? (
@@ -527,40 +571,6 @@ export function EcommerceVideoPanel({
               </div>
             ) : null}
 
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                disabled={busy || offline}
-                className="min-h-10 flex-1 rounded-lg bg-[var(--beat-accent)] px-3 text-xs font-medium text-black disabled:opacity-40"
-                onClick={() => void runScript()}
-              >
-                {busy
-                  ? t('videoStatusRunning')
-                  : script
-                    ? t('videoRerunScript')
-                    : t('videoRunScript')}
-              </button>
-              {canContinue ? (
-                <button
-                  type="button"
-                  disabled={busy || offline}
-                  className="min-h-10 flex-1 rounded-lg border border-white/20 px-3 text-xs hover:bg-white/5 disabled:opacity-40"
-                  onClick={() => void continueWorkflow(SHORTFILM_SCRIPT_STAGE)}
-                >
-                  {t('videoConfirmContinue')}
-                </button>
-              ) : null}
-              <button
-                type="button"
-                disabled={busy}
-                aria-label={t('videoRefresh')}
-                title={t('videoRefresh')}
-                className="flex min-h-10 w-10 items-center justify-center rounded-lg border border-white/15 text-white/60 hover:bg-white/5"
-                onClick={() => void refresh().catch(() => undefined)}
-              >
-                <RefreshCw className="size-3.5" aria-hidden="true" />
-              </button>
-            </div>
           </div>
         ) : null}
 
