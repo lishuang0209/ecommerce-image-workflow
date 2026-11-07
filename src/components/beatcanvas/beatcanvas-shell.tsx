@@ -1,6 +1,7 @@
 import { resolveEcommerceManualConnection } from '@/core/demo/ecommerce-contract';
 import { apiJsonPost } from '@/lib/api-client';
 import { EcommerceMaterialPanel } from './ecommerce-material-panel';
+import { EcommerceVideoPanel } from './ecommerce-video-panel';
 import { VIDEO_ANALYSIS_MODEL_ID } from '@/core/effects/video-analysis';
 import { getTemplateGenerationBlockers } from '@/core/workflows/workflow-template';
 import {
@@ -1788,7 +1789,7 @@ export function BeatCanvasShell({
 
       {/* Canvas area */}
       <div className="relative flex-1 min-w-0">
-        {isWorkspaceReady && !videoProject && <EcommerceMaterialPanel onLocateCard={id=>{handleSelectShape(id);focusShape(id);}} onLocateSku={sku=>{const ids=Object.values(canvasCardsRef.current).filter(card=>card.name.startsWith(sku+' · ')&&editorRef.current?.getShape(card.id)).map(card=>card.id);if(ids.length)focusShapes(ids);}} onSavedSnapshot={(document,version)=>{recordCanvasHistory();snapshotAcceptRef.current(document,version);}} onCreateNode={type=>type==='text'?insertTextCard():handleCreatePromptDraft('image')} onInsertAsset={asset=>insertProjectAsset({...asset,projectId})} projectId={projectId} cards={canvasCards} flush={() => snapshotFlushRef.current()} runTask={id => runGenerateDraft(id, { suppressResultFocus: true })} />}
+        {isWorkspaceReady && (videoProject ? <EcommerceVideoPanel projectId={projectId} cards={canvasCards} flush={() => snapshotFlushRef.current()} onSavedSnapshot={(document,version)=>{recordCanvasHistory();snapshotAcceptRef.current(document,version);}} onUpdateFacts={text=>{if(canvasCardsRef.current['video-product-facts']?.kind==='text')updateCanvasCard('video-product-facts',{textContent:text});}} /> : <EcommerceMaterialPanel onLocateCard={id=>{handleSelectShape(id);focusShape(id);}} onLocateSku={sku=>{const ids=Object.values(canvasCardsRef.current).filter(card=>card.name.startsWith(sku+' · ')&&editorRef.current?.getShape(card.id)).map(card=>card.id);if(ids.length)focusShapes(ids);}} onSavedSnapshot={(document,version)=>{recordCanvasHistory();snapshotAcceptRef.current(document,version);}} onCreateNode={type=>type==='text'?insertTextCard():handleCreatePromptDraft('image')} onInsertAsset={asset=>insertProjectAsset({...asset,projectId})} projectId={projectId} cards={canvasCards} flush={() => snapshotFlushRef.current()} runTask={id => runGenerateDraft(id, { suppressResultFocus: true })} />)}
         <BeatCanvasFrontLayerProvider value={frontLayerValue}>
           <Suspense fallback={<BeatCanvasLoading />}>
             <BeatCanvasReactFlowEditor
