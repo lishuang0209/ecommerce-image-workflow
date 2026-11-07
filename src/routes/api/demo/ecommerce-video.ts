@@ -4,10 +4,12 @@ import { createFileRoute } from '@tanstack/react-router';
 import { z } from 'zod';
 
 import { buildTextCard } from '@/core/beatcanvas/text-nodes';
+import type { CanvasCard } from '@/core/beatcanvas/canvas-types';
 import { persistBeatDesignCommand } from '@/core/commands/persist';
 import { loadProjectWithLatestSnapshot } from '@/core/projects/projects';
 import {
   continueShortfilm,
+  getShortfilmDesign,
   getShortfilmScript,
   getShortfilmStatus,
   isShortfilmOnline,
@@ -17,15 +19,23 @@ import {
 } from '@/core/video/shortfilm-client';
 import {
   buildScriptCardText,
+  designCardName,
+  designIsReady,
   scriptCardName,
   scriptIsReady,
+  SHORTFILM_DESIGN_STAGE,
   SHORTFILM_SCRIPT_CARD_ID,
   SHORTFILM_SCRIPT_STAGE,
   SHORTFILM_STAGES,
+  type ShortfilmDesignArtifact,
   type ShortfilmScriptArtifact,
   type ShortfilmStageProgress,
   type ShortfilmStatus,
 } from '@/core/video/shortfilm-contract';
+import {
+  importShortfilmImage,
+  shortfilmAssetUrl,
+} from '@/core/video/import-shortfilm-assets';
 import {
   readShortfilmSession,
   writeShortfilmSession,
@@ -58,6 +68,7 @@ const runSchema = z
   .object({
     projectId: z.string().uuid(),
     action: z.literal('run'),
+    stage: z.enum(['script_generation', 'character_design']).optional(),
     locale: localeSchema,
   })
   .strict();
@@ -66,6 +77,7 @@ const continueSchema = z
   .object({
     projectId: z.string().uuid(),
     action: z.literal('continue'),
+    stage: z.enum(['script_generation', 'character_design']).optional(),
     locale: localeSchema,
   })
   .strict();
@@ -140,6 +152,7 @@ async function readState(projectId: string) {
       sessionId: null,
       stages: stageViews(),
       script: null,
+      design: null,
       status: {},
       stageProgress: {},
       currentStage: null,
@@ -154,6 +167,7 @@ async function readState(projectId: string) {
       sessionId: session.sessionId,
       stages: stageViews(),
       script: null,
+      design: null,
       status: {},
       stageProgress: {},
       currentStage: null,
@@ -176,6 +190,7 @@ async function readState(projectId: string) {
         missing: true,
         stages: stageViews(),
         script: null,
+        design: null,
         status: {},
         stageProgress: {},
         currentStage: null,
@@ -195,12 +210,44 @@ async function readState(projectId: string) {
     }
   }
 
+  let design: ShortfilmDesignArtifact | null = null;
+  if (designIsReady(status.status)) {
+    try {
+      const raw = await getShortfilmDesign(session.sessionId);
+      const resolveAssets = (assets?: Array<{
+        id: string;
+        name: string;
+        description?: string;
+        selected?: string;
+        versions?: string[];
+        status?: string;
+      }>) =>
+        (assets ?? []).map((asset) => ({
+          ...asset,
+          selected: asset.selected
+            ? shortfilmAssetUrl(asset.selected)
+            : undefined,
+          versions: (asset.versions ?? []).map((version) =>
+            shortfilmAssetUrl(version)
+          ),
+        }));
+      design = {
+        ...raw,
+        characters: resolveAssets(raw.characters),
+        settings: resolveAssets(raw.settings),
+      };
+    } catch {
+      design = null;
+    }
+  }
+
   return {
     connected: true,
     sessionId: session.sessionId,
     missing: false,
     stages: stageViews(status.status, status.stage_progress),
     script,
+    design,
     status: status.status ?? {},
     stageProgress: status.stage_progress ?? {},
     currentStage: status.current_stage ?? null,
@@ -258,6 +305,126 @@ async function importScriptCard(
         document: saved.snapshot,
         version: saved.snapshotVersion,
         importedCardId: SHORTFILM_SCRIPT_CARD_ID,
+      };
+    }
+    lastError = result.message;
+  }
+
+  throw new Error(lastError);
+}
+
+async function importDesignCards(
+  projectId: string,
+  design: ShortfilmDesignArtifact,
+  locale?: string
+) {
+  const assets = [
+    ...(design.characters ?? []).map((asset) => ({
+      ...asset,
+      kind: 'character' as const,
+    })),
+    ...(design.settings ?? []).map((asset) => ({
+      ...asset,
+      kind: 'setting' as const,
+    })),
+  ];
+  const withImage = assets.filter(
+    (asset) => asset.selected || (asset.versions?.length ?? 0) > 0
+  );
+
+  const empty = async () => {
+    const saved = await loadProjectWithLatestSnapshot({ projectId });
+    return {
+      document: saved?.snapshot ?? null,
+      version: saved?.snapshotVersion ?? null,
+      importedCardIds: [] as string[],
+      importedCount: 0,
+    };
+  };
+  if (withImage.length === 0) return empty();
+
+  const imported: Array<{
+    shortfilmId: string;
+    kind: 'character' | 'setting';
+    name: string;
+    assetId: string;
+    publicUrl: string;
+  }> = [];
+  for (const asset of withImage) {
+    const path = asset.selected || asset.versions!.at(-1)!;
+    const image = await importShortfilmImage({
+      projectId,
+      url: shortfilmAssetUrl(path),
+      filename: `${asset.id}.png`,
+      metadata: {
+        shortfilmAssetId: asset.id,
+        kind: asset.kind,
+        name: asset.name,
+      },
+    });
+    imported.push({
+      shortfilmId: asset.id,
+      kind: asset.kind,
+      name: asset.name,
+      assetId: image.assetId,
+      publicUrl: image.publicUrl,
+    });
+  }
+
+  let lastError = 'Unable to add design images to the canvas.';
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const state = await loadProjectWithLatestSnapshot({ projectId });
+    if (!state) throw new Error('Project not found.');
+
+    const operations: Array<{
+      type: 'upsert_card';
+      card: CanvasCard;
+      frame: { x: number; y: number; w: number; h: number };
+    }> = [];
+    imported.forEach((item, index) => {
+      const cardId = `video-design-${item.shortfilmId}`;
+      const frame = state.snapshot.frames[cardId] ?? {
+        x: 120 + (index % 3) * 380,
+        y: 940 + Math.floor(index / 3) * 360,
+        w: 340,
+        h: 320,
+      };
+      operations.push({
+        type: 'upsert_card',
+        card: {
+          ...buildTextCard({
+            id: cardId,
+            name: designCardName(item.kind, item.name, locale),
+          }),
+          kind: 'asset',
+          type: 'image',
+          assetId: item.assetId,
+          url: item.publicUrl,
+          status: 'succeeded',
+        } as CanvasCard,
+        frame,
+      });
+    });
+
+    const commandId = randomUUID();
+    const result = await persistBeatDesignCommand({
+      projectId,
+      origin: 'ui',
+      commandId,
+      idempotencyKey: commandId,
+      expectedRevision: state.snapshotVersion,
+      command: { type: 'canvas.apply', operations },
+    });
+    if (result.ok) {
+      const saved = await loadProjectWithLatestSnapshot({ projectId });
+      if (!saved) {
+        throw new Error('Project not found after saving design images.');
+      }
+      return {
+        document: saved.snapshot,
+        version: saved.snapshotVersion,
+        importedCardIds: imported.map((item) => `video-design-${item.shortfilmId}`),
+        importedCount: imported.length,
       };
     }
     lastError = result.message;
@@ -365,7 +532,7 @@ async function POST({ request }: { request: Request }) {
     if (body.action === 'continue') {
       const result = await continueShortfilm(session.sessionId);
       const confirmed = new Set(session.confirmedStages ?? []);
-      confirmed.add(SHORTFILM_SCRIPT_STAGE);
+      confirmed.add(body.stage ?? SHORTFILM_SCRIPT_STAGE);
       await writeShortfilmSession({
         ...session,
         confirmedStages: [...confirmed],
@@ -374,6 +541,44 @@ async function POST({ request }: { request: Request }) {
       return Response.json({
         sessionId: session.sessionId,
         result,
+        state,
+      });
+    }
+
+    const stage = body.stage ?? SHORTFILM_SCRIPT_STAGE;
+
+    if (stage === SHORTFILM_DESIGN_STAGE) {
+      await runShortfilmStage(session.sessionId, SHORTFILM_DESIGN_STAGE);
+      const status = await getShortfilmStatus(session.sessionId);
+      const designStatus = status.status?.[SHORTFILM_DESIGN_STAGE];
+      if (designStatus === 'error') {
+        throw new Error(status.error || 'Design generation failed.');
+      }
+      if (designStatus !== 'completed' && designStatus !== 'waiting') {
+        throw new Error(
+          `Design generation did not finish (status: ${designStatus ?? 'unknown'}).`
+        );
+      }
+
+      const design = await getShortfilmDesign(session.sessionId);
+      const imported = await importDesignCards(
+        body.projectId,
+        design,
+        body.locale
+      );
+      await writeShortfilmSession({
+        ...session,
+        confirmedStages: (session.confirmedStages ?? []).filter(
+          (confirmedStage) => confirmedStage !== SHORTFILM_DESIGN_STAGE
+        ),
+      });
+      const state = await readState(body.projectId);
+      return Response.json({
+        sessionId: session.sessionId,
+        stage: SHORTFILM_DESIGN_STAGE,
+        status: status.status ?? {},
+        design,
+        ...imported,
         state,
       });
     }
@@ -406,6 +611,7 @@ async function POST({ request }: { request: Request }) {
     const state = await readState(body.projectId);
     return Response.json({
       sessionId: session.sessionId,
+      stage: SHORTFILM_SCRIPT_STAGE,
       status: status.status ?? {},
       script,
       ...imported,

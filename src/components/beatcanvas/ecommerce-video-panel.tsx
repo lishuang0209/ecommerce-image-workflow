@@ -6,10 +6,13 @@ import { CheckCircle2, Loader2, RefreshCw, Video } from 'lucide-react';
 import type { CanvasCard } from '@/core/beatcanvas/canvas-types';
 import type { ProjectSnapshotDocument } from '@/core/projects/project-snapshot';
 import {
+  designIsReady,
   scriptIsReady,
+  SHORTFILM_DESIGN_STAGE,
   SHORTFILM_SCRIPT_STAGE,
   SHORTFILM_STAGES,
   stageStatusKey,
+  type ShortfilmDesignArtifact,
   type ShortfilmScriptArtifact,
   type ShortfilmStageProgress,
 } from '@/core/video/shortfilm-contract';
@@ -32,6 +35,7 @@ type VideoState = {
   missing?: boolean;
   stages: VideoStageView[];
   script: ShortfilmScriptArtifact | null;
+  design: ShortfilmDesignArtifact | null;
   status: Record<string, string>;
   stageProgress: Record<string, ShortfilmStageProgress>;
   currentStage: string | null;
@@ -42,7 +46,9 @@ type VideoState = {
 type RunResult = {
   document?: ProjectSnapshotDocument;
   version?: number;
+  stage?: string;
   script?: ShortfilmScriptArtifact;
+  design?: ShortfilmDesignArtifact;
 };
 
 const POLL_INTERVAL_MS = 2_000;
@@ -117,15 +123,17 @@ export function EcommerceVideoPanel({
   }, [refresh]);
 
   const scriptStatus = state?.status?.[SHORTFILM_SCRIPT_STAGE];
+  const designStatus = state?.status?.[SHORTFILM_DESIGN_STAGE];
   useEffect(() => {
     if (!state?.sessionId) return;
-    const running = scriptStatus === 'running';
+    const running =
+      scriptStatus === 'running' || designStatus === 'running';
     if (!busy && !running) return;
     const timer = window.setInterval(() => {
       void refresh().catch(() => undefined);
     }, POLL_INTERVAL_MS);
     return () => window.clearInterval(timer);
-  }, [busy, refresh, scriptStatus, state?.sessionId]);
+  }, [busy, designStatus, refresh, scriptStatus, state?.sessionId]);
 
   const startAndRun = async () => {
     const text = idea.trim();
@@ -194,7 +202,32 @@ export function EcommerceVideoPanel({
     }
   };
 
-  const continueWorkflow = async () => {
+  const runDesign = async () => {
+    if (busy) return;
+    setBusy(true);
+    setError('');
+    setNotice('');
+    try {
+      await flush();
+      const result = await apiJsonPost<RunResult>('/api/demo/ecommerce-video', {
+        projectId,
+        action: 'run',
+        stage: SHORTFILM_DESIGN_STAGE,
+        locale,
+      });
+      if (result.document && typeof result.version === 'number') {
+        onSavedSnapshot(result.document, result.version);
+      }
+      await refresh();
+      setNotice(t('videoDesignReady'));
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : t('videoError'));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const continueWorkflow = async (stage: string) => {
     if (busy) return;
     setBusy(true);
     setError('');
@@ -204,6 +237,7 @@ export function EcommerceVideoPanel({
       await apiJsonPost('/api/demo/ecommerce-video', {
         projectId,
         action: 'continue',
+        stage,
         locale,
       });
       await refresh();
@@ -216,24 +250,38 @@ export function EcommerceVideoPanel({
   };
 
   const script = state?.script ?? null;
+  const design = state?.design ?? null;
   const ready = scriptIsReady(state?.status);
+  const designReady = designIsReady(state?.status);
+  const confirmedStages = state?.confirmedStages ?? [];
   // Only offer confirm/continue while the script has not been confirmed yet.
   const canContinue =
-    ready && !(state?.confirmedStages ?? []).includes(SHORTFILM_SCRIPT_STAGE);
+    ready && !confirmedStages.includes(SHORTFILM_SCRIPT_STAGE);
+  const canContinueDesign =
+    designReady && !confirmedStages.includes(SHORTFILM_DESIGN_STAGE);
+  const scriptConfirmed = confirmedStages.includes(SHORTFILM_SCRIPT_STAGE);
   const hasSession = Boolean(state?.sessionId);
   const offline = state ? !state.connected : false;
   const stages: VideoStageView[] = state?.stages?.length
     ? state.stages
     : SHORTFILM_STAGES.map((stage) => ({ ...stage, status: 'pending' }));
   const scriptStage = stages.find((stage) => stage.id === SHORTFILM_SCRIPT_STAGE);
+  const designStage = stages.find((stage) => stage.id === SHORTFILM_DESIGN_STAGE);
   const scriptRunning = scriptStage?.status === 'running';
+  const designRunning = designStage?.status === 'running';
+  const activeStage = designRunning ? designStage : scriptRunning ? scriptStage : null;
   const runningPercent =
-    typeof scriptStage?.progress === 'number' ? scriptStage.progress : null;
-  const runningMessage = scriptStage?.message ?? null;
+    typeof activeStage?.progress === 'number' ? activeStage.progress : null;
+  const runningMessage = activeStage?.message ?? null;
   const fallbackText =
     script && !script.episodes?.length
       ? script.original_text || script.meta?.original_text || ''
       : '';
+  const designAssets = [
+    ...(design?.characters ?? []),
+    ...(design?.settings ?? []),
+  ];
+  const designHasImages = designAssets.some((asset) => asset.selected);
 
   return (
     <div className="pointer-events-auto absolute left-4 top-4 z-40 w-[460px] max-w-[calc(100%_-_32px)] text-[var(--beat-text-1)]">
@@ -389,6 +437,60 @@ export function EcommerceVideoPanel({
               </p>
             )}
 
+            {scriptConfirmed ? (
+              <section className="space-y-2 rounded-lg border border-white/10 bg-white/[0.02] p-3">
+                <div className="flex items-center justify-between text-xs">
+                  <h3 className="font-medium">{t('videoStageDesign')}</h3>
+                  <span className={statusTone(designStage?.status ?? 'pending')}>
+                    {designReady ? t('videoStatusCompleted') : t('videoStatusPending')}
+                  </span>
+                </div>
+
+                {designHasImages ? (
+                  <div className="grid grid-cols-3 gap-1.5">
+                    {designAssets.map((asset) =>
+                      asset.selected ? (
+                        <img
+                          key={asset.id}
+                          src={asset.selected}
+                          alt={asset.name}
+                          className="aspect-square w-full rounded bg-white/5 object-contain"
+                        />
+                      ) : null
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-[11px] leading-5 text-white/45">
+                    {t('videoDesignEmpty')}
+                  </p>
+                )}
+
+                {canContinueDesign ? (
+                  <button
+                    type="button"
+                    disabled={busy || offline}
+                    className="min-h-10 w-full rounded-lg border border-white/20 text-xs hover:bg-white/5 disabled:opacity-40"
+                    onClick={() => void continueWorkflow(SHORTFILM_DESIGN_STAGE)}
+                  >
+                    {t('videoConfirmDesign')}
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={busy || offline}
+                    className="min-h-10 w-full rounded-lg bg-[var(--beat-accent)] text-xs font-medium text-black disabled:opacity-40"
+                    onClick={() => void runDesign()}
+                  >
+                    {busy
+                      ? t('videoStatusRunning')
+                      : designReady
+                        ? t('videoRerunDesign')
+                        : t('videoGenerateDesign')}
+                  </button>
+                )}
+              </section>
+            ) : null}
+
             {busy ? (
               <div
                 role="status"
@@ -397,9 +499,11 @@ export function EcommerceVideoPanel({
               >
                 <div className="flex items-center gap-2 text-xs text-white/85">
                   <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
-                  {scriptRunning
-                    ? t('videoGeneratingLabel')
-                    : t('videoStartingLabel')}
+                  {designRunning
+                    ? t('videoGeneratingDesignLabel')
+                    : scriptRunning
+                      ? t('videoGeneratingLabel')
+                      : t('videoStartingLabel')}
                   {runningPercent != null ? (
                     <span className="tabular-nums text-white/50">{runningPercent}%</span>
                   ) : null}
@@ -441,7 +545,7 @@ export function EcommerceVideoPanel({
                   type="button"
                   disabled={busy || offline}
                   className="min-h-10 flex-1 rounded-lg border border-white/20 px-3 text-xs hover:bg-white/5 disabled:opacity-40"
-                  onClick={() => void continueWorkflow()}
+                  onClick={() => void continueWorkflow(SHORTFILM_SCRIPT_STAGE)}
                 >
                   {t('videoConfirmContinue')}
                 </button>

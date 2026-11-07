@@ -3,12 +3,14 @@ import assert from 'node:assert/strict';
 
 import {
   buildScriptCardText,
+  designCardName,
+  designIsReady,
   SHORTFILM_SCRIPT_CARD_MAX_CHARS,
   SHORTFILM_STAGES,
   stageStatusKey,
 } from './shortfilm-contract';
 
-test('the video skeleton exposes six ordered stages and only the script stage is connected', () => {
+test('the video skeleton exposes six ordered stages with the first two connected', () => {
   assert.deepEqual(
     SHORTFILM_STAGES.map((stage) => stage.id),
     [
@@ -22,7 +24,7 @@ test('the video skeleton exposes six ordered stages and only the script stage is
   );
   assert.deepEqual(
     SHORTFILM_STAGES.filter((stage) => stage.connected).map((stage) => stage.id),
-    ['script_generation']
+    ['script_generation', 'character_design']
   );
 });
 
@@ -68,4 +70,14 @@ test('stage status keys map known shortfilm states', () => {
   assert.equal(stageStatusKey('error'), 'videoStatusError');
   assert.equal(stageStatusKey('pending'), 'videoStatusPending');
   assert.equal(stageStatusKey(undefined), 'videoStatusPending');
+});
+
+test('design readiness and localized card names', () => {
+  assert.equal(designIsReady({ character_design: 'completed' }), true);
+  assert.equal(designIsReady({ character_design: 'waiting' }), true);
+  assert.equal(designIsReady({ character_design: 'running' }), false);
+  assert.equal(designIsReady(undefined), false);
+
+  assert.equal(designCardName('character', 'Bottle', 'en'), 'Character · Bottle');
+  assert.match(designCardName('setting', 'Office', 'zh'), /场景/);
 });

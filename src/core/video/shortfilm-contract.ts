@@ -6,6 +6,7 @@
  */
 
 export const SHORTFILM_SCRIPT_STAGE = 'script_generation';
+export const SHORTFILM_DESIGN_STAGE = 'character_design';
 export const SHORTFILM_SCRIPT_CARD_ID = 'video-ad-script';
 export const SHORTFILM_FACTS_CARD_ID = 'video-product-facts';
 export const SHORTFILM_SCRIPT_CARD_MAX_CHARS = 100_000;
@@ -26,7 +27,7 @@ export type ShortfilmStage = {
 
 export const SHORTFILM_STAGES: readonly ShortfilmStage[] = [
   { id: 'script_generation', labelKey: 'videoStageScript', connected: true },
-  { id: 'character_design', labelKey: 'videoStageDesign', connected: false },
+  { id: 'character_design', labelKey: 'videoStageDesign', connected: true },
   { id: 'storyboard', labelKey: 'videoStageStoryboard', connected: false },
   { id: 'reference_generation', labelKey: 'videoStageReference', connected: false },
   { id: 'video_generation', labelKey: 'videoStageVideo', connected: false },
@@ -37,6 +38,21 @@ export type ShortfilmScriptEpisode = {
   episode_number?: number | string;
   act_title?: string;
   content?: string;
+};
+
+export type ShortfilmDesignAsset = {
+  id: string;
+  name: string;
+  description?: string;
+  selected?: string;
+  versions?: string[];
+  status?: string;
+};
+
+export type ShortfilmDesignArtifact = {
+  session_id?: string;
+  characters?: ShortfilmDesignAsset[];
+  settings?: ShortfilmDesignAsset[];
 };
 
 export type ShortfilmScriptArtifact = {
@@ -114,6 +130,27 @@ export function scriptCardName(locale?: string): string {
   return 'Ad script';
 }
 
+/** Localized canvas card name for a generated character/setting image. */
+export function designCardName(
+  kind: 'character' | 'setting',
+  name: string,
+  locale?: string
+): string {
+  const label =
+    locale === 'zh'
+      ? kind === 'character'
+        ? '角色'
+        : '场景'
+      : locale === 'ja'
+        ? kind === 'character'
+          ? 'キャラクター'
+          : 'シーン'
+        : kind === 'character'
+          ? 'Character'
+          : 'Setting';
+  return `${label} · ${name}`;
+}
+
 /** i18n key for a shortfilm stage status. */
 export function stageStatusKey(status: string | undefined): string {
   switch (status) {
@@ -134,5 +171,10 @@ export function stageStatusKey(status: string | undefined): string {
 
 export function scriptIsReady(status: Record<string, string> | undefined): boolean {
   const value = status?.[SHORTFILM_SCRIPT_STAGE];
+  return value === 'completed' || value === 'waiting';
+}
+
+export function designIsReady(status: Record<string, string> | undefined): boolean {
+  const value = status?.[SHORTFILM_DESIGN_STAGE];
   return value === 'completed' || value === 'waiting';
 }

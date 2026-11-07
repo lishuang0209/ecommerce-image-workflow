@@ -1,4 +1,5 @@
 import type {
+  ShortfilmDesignArtifact,
   ShortfilmScriptArtifact,
   ShortfilmStatus,
 } from './shortfilm-contract';
@@ -139,6 +140,16 @@ export async function getShortfilmScript(
   const response = await getShortfilmArtifact<ShortfilmScriptArtifact>(
     sessionId,
     'script_generation'
+  );
+  return response.artifact ?? {};
+}
+
+export async function getShortfilmDesign(
+  sessionId: string
+): Promise<ShortfilmDesignArtifact> {
+  const response = await getShortfilmArtifact<ShortfilmDesignArtifact>(
+    sessionId,
+    'character_design'
   );
   return response.artifact ?? {};
 }
