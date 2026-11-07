@@ -1,3 +1,4 @@
+import { resolveEcommerceManualConnection } from '@/core/demo/ecommerce-contract';
 import { apiJsonPost } from '@/lib/api-client';
 import { EcommerceMaterialPanel } from './ecommerce-material-panel';
 import { VIDEO_ANALYSIS_MODEL_ID } from '@/core/effects/video-analysis';
@@ -689,6 +690,16 @@ export function BeatCanvasShell({
     (edges: Array<{ source: string; target: string }>) => {
       for (const edge of edges) {
         const draftCard = canvasCardsRef.current[edge.target];
+        if (draftCard?.kind === 'text') {
+          updateCanvasCard(draftCard.id, (current) => ({
+            ...current,
+            referenceCardIds: removeReferenceCardId(
+              current.referenceCardIds,
+              edge.source
+            ),
+          }));
+          continue;
+        }
         if (draftCard?.kind !== 'generation') {
           continue;
         }
@@ -716,7 +727,7 @@ export function BeatCanvasShell({
         });
       }
     },
-    [canvasCardsRef, updateDraftCard]
+    [canvasCardsRef, updateCanvasCard, updateDraftCard]
   );
 
   const handlePinGenerationOutput = useCallback(
@@ -1526,9 +1537,30 @@ export function BeatCanvasShell({
       if (sourceCardId && targetCardId && sourceCardId !== targetCardId) {
         const sourceCard = canvasCardsRef.current[sourceCardId];
         const targetCard = canvasCardsRef.current[targetCardId];
-        if (!sourceCard || targetCard?.kind !== 'generation') {
+        const connection = targetCard
+          ? resolveEcommerceManualConnection(
+              sourceCardId,
+              targetCardId,
+              targetCard.kind
+            )
+          : 'reject';
+        if (!sourceCard || !targetCard || connection === 'reject') {
           return;
         }
+        if (connection === 'text') {
+          if (targetCard.referenceCardIds.includes(sourceCardId)) return;
+          createConnectorBetweenCards(sourceCardId, targetCardId, {
+            recordHistory: true,
+          });
+          updateCanvasCard(targetCardId, {
+            referenceCardIds: appendUniqueReferenceCardId(
+              targetCard.referenceCardIds,
+              sourceCardId
+            ),
+          });
+          return;
+        }
+        if (targetCard.kind !== 'generation') return;
 
         if (
           targetCard.generationMode === 'analysis' &&
@@ -1571,6 +1603,7 @@ export function BeatCanvasShell({
     createConnectorBetweenCards,
     canvasCardsRef,
     imageModels,
+    updateCanvasCard,
     updateDraftCard,
     videoModels,
   ]);

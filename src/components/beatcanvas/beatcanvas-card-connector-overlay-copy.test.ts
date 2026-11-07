@@ -12,6 +12,11 @@ test('connector create menu shortens only the visible upload label', () => {
   assert.match(source, /\{labels\.connectorUploadLabel\}/);
 });
 
+test('connector ports include text cards and a drop anywhere on the card connects', () => {
+  assert.match(source, /TEXT_CARD_NODE_TYPE/);
+  assert.match(source, /targetCard && drag\.sourceSide === 'output'/);
+});
+
 test('blank canvas opens the create menu from double-click, slash, and context menu', () => {
   assert.match(source, /dblclick/);
   assert.match(source, /contextmenu/);

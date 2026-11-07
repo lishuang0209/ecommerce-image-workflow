@@ -8,6 +8,7 @@ import {
 import {
   ASSET_CARD_NODE_TYPE,
   GENERATION_CARD_NODE_TYPE,
+  TEXT_CARD_NODE_TYPE,
 } from './react-flow/beatcanvas-react-flow-types';
 import { useCanvasFrontLayer } from './beatcanvas-front-layer-context';
 
@@ -32,7 +33,8 @@ const MENU_WIDTH = 276;
 
 const isCardShapeType = (shapeType: string) =>
   shapeType === ASSET_CARD_NODE_TYPE ||
-  shapeType === GENERATION_CARD_NODE_TYPE;
+  shapeType === GENERATION_CARD_NODE_TYPE ||
+  shapeType === TEXT_CARD_NODE_TYPE;
 
 export function CardConnectorOverlay() {
   const { editor } = useCanvasEngine();
@@ -101,28 +103,15 @@ export function CardConnectorOverlay() {
 
       const targetCard = findCardShapeAtPoint(point, drag.sourceId);
 
-      if (targetCard) {
-        // Determine target side based on where the cursor is relative to target card center
-        const targetBounds = editor.getShapePageBounds(targetCard.id);
-        if (targetBounds) {
-          const targetSide: Side =
-            point.x < (targetBounds.minX + targetBounds.maxX) / 2
-              ? 'input'
-              : 'output';
-
-          // Only connect output→input
-          if (drag.sourceSide === 'output' && targetSide === 'input') {
-            // Dispatch custom event for the canvas graph to handle
-            window.dispatchEvent(
-              new CustomEvent('beatcanvas:connect-cards', {
-                detail: {
-                  sourceCardId: drag.sourceId,
-                  targetCardId: targetCard.id,
-                },
-              })
-            );
-          }
-        }
+      if (targetCard && drag.sourceSide === 'output') {
+        window.dispatchEvent(
+          new CustomEvent('beatcanvas:connect-cards', {
+            detail: {
+              sourceCardId: drag.sourceId,
+              targetCardId: targetCard.id,
+            },
+          })
+        );
       } else if (drag.sourceSide === 'output') {
         setCreateMenu({
           sourceId: drag.sourceId,

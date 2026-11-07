@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { assertSkuReferences, assertSkuTextContext, ecommerceTag } from './ecommerce-contract';
+import { assertSkuReferences, assertSkuTextContext, ecommerceTag, resolveEcommerceManualConnection } from './ecommerce-contract';
 import { runTasksInOrder } from './serial-tasks';
 
 test('SKU references require own product and exclude foreign or lifestyle inputs from listings',()=>{
@@ -159,4 +159,27 @@ test('product name is part of the facts and only identical non-empty products ma
  assert.doesNotThrow(() => assertSameProduct('White', 'Black', tags));
  assert.throws(() => assertSameProduct('White', 'Cup', tags), /different products/);
  assert.throws(() => assertSameProduct('White', 'Bare', tags), /same product name/);
+});
+
+test('a deleted workflow wire can be drawn again, and a wire from another task cannot', () => {
+ const prefix = 'sku-0123456789abcdef';
+ const other = 'sku-abcdef0123456789';
+ const main = `${prefix}-main-image`;
+ const scene = `${prefix}-scene-abc123-image`;
+ assert.equal(resolveEcommerceManualConnection(`${prefix}-main-prompt`, main, 'generation'), 'generation');
+ assert.equal(resolveEcommerceManualConnection(`${prefix}-composition-template`, main, 'generation'), 'generation');
+ assert.equal(resolveEcommerceManualConnection(`${prefix}-master-reference`, main, 'generation'), 'generation');
+ assert.equal(resolveEcommerceManualConnection('sku-asset-photo', main, 'generation'), 'generation');
+ assert.equal(resolveEcommerceManualConnection(`${prefix}-facts`, `${prefix}-main-prompt`, 'text'), 'text');
+ assert.equal(resolveEcommerceManualConnection(`${scene.replace(/-image$/, '-prompt')}`, scene, 'generation'), 'generation');
+ assert.equal(resolveEcommerceManualConnection(`${prefix}-adopted-main`, scene, 'generation'), 'generation');
+ assert.equal(resolveEcommerceManualConnection('sku-asset-style', scene, 'generation'), 'generation');
+ assert.equal(resolveEcommerceManualConnection(`${scene.replace(/-image$/, '-brief')}`, scene.replace(/-image$/, '-prompt'), 'text'), 'text');
+ assert.equal(resolveEcommerceManualConnection(`${other}-main-prompt`, main, 'generation'), 'reject');
+ assert.equal(resolveEcommerceManualConnection(`${prefix}-facts`, main, 'generation'), 'reject');
+ assert.equal(resolveEcommerceManualConnection('sku-asset-photo', `${prefix}-main-prompt`, 'text'), 'reject');
+ assert.equal(resolveEcommerceManualConnection(`${prefix}-composition-template`, `${prefix}-main-prompt`, 'text'), 'reject');
+ assert.equal(resolveEcommerceManualConnection(`${prefix}-main-prompt`, scene, 'generation'), 'reject');
+ assert.equal(resolveEcommerceManualConnection('plain-note', 'plain-draft', 'generation'), 'generation');
+ assert.equal(resolveEcommerceManualConnection('plain-note', 'plain-note-2', 'text'), 'reject');
 });

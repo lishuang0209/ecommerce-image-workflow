@@ -86,6 +86,27 @@ export function validateEcommerceInputs({prefix,task,references,cards,assets}: {
  return {sku:product.sku,tags:identityTags,hasMaster};
 }
 
+/**
+ * A wire the ecommerce workflow already uses, so a deleted line can be drawn again.
+ * Product photos are `sku-asset-*` cards; SKU and role are still checked when generating.
+ * Returns where the reference is stored, or `reject` when this pair is not part of the workflow.
+ */
+export function resolveEcommerceManualConnection(sourceId: string, targetId: string, targetKind: string): 'generation' | 'text' | 'reject' {
+  const task = ecommerceTaskPattern.exec(targetId);
+  const prompt = ecommercePromptPattern.exec(targetId);
+  if (!task && !prompt) return targetKind === 'generation' ? 'generation' : 'reject';
+  const prefix = (task ?? prompt)![1];
+  const allowed = task
+    ? task[2] === 'main'
+      ? sourceId === `${prefix}-main-prompt` || sourceId === `${prefix}-composition-template` || sourceId === `${prefix}-master-reference` || sourceId.startsWith('sku-asset-')
+      : sourceId === targetId.replace(/-image$/, '-prompt') || sourceId === `${prefix}-adopted-main` || sourceId.startsWith('sku-asset-')
+    : sourceId === `${prefix}-facts` || (prompt![2] !== 'main' && sourceId === targetId.replace(/-prompt$/, '-brief'));
+  if (!allowed) return 'reject';
+  if (task && targetKind === 'generation') return 'generation';
+  if (prompt && targetKind === 'text') return 'text';
+  return 'reject';
+}
+
 /** Local readiness check shared by workflow controls and paid-generation preflight. */
 export function isEcommerceTaskPromptReady(card:{id:string;referenceCardIds:string[]},cards:Record<string,{kind:string;textContent?:string;referenceCardIds:string[]}>){
  const match=ecommerceTaskPattern.exec(card.id);if(!match)return false;
