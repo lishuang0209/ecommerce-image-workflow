@@ -132,6 +132,17 @@ test('custom scene ids are recognized and explicit descriptions override legacy 
  assert.equal(sceneDescriptionForTask(legacy,{[legacy.replace(/-image$/,'-brief')]:{textContent:'影棚静物'}}),'影棚静物');
 });
 
+test('a single left-facing template overrides a pair shown in the reference photos', async () => {
+ const { compositionImageDirective } = await import('./ecommerce-contract');
+ const text = compositionImageDirective({ count: 'single', facing: 'left', scale: 'medium' });
+ assert.match(text, /只能出现 1 件商品/);
+ assert.match(text, /只画一只鞋/);
+ assert.match(text, /指向画面左侧/);
+ assert.match(text, /禁止前端朝右/);
+ assert.match(text, /约占画面宽度 60%/);
+ assert.doesNotMatch(text, /必须是两只鞋/);
+});
+
 test('composition template text round-trips and is complete only with all three choices', async () => {
  const { compositionTemplateText, parseCompositionTemplate, isCompleteCompositionTemplate } = await import('./ecommerce-contract');
  const text = compositionTemplateText({ count: 'pair', facing: 'threeQuarter', scale: 'large' });

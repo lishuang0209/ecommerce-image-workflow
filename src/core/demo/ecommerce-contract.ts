@@ -133,5 +133,30 @@ export function parseCompositionTemplate(text: string | undefined): Partial<Comp
 }
 export const isCompleteCompositionTemplate = (text: string | undefined) => Object.keys(parseCompositionTemplate(text)).length === 3;
 
+/** Concrete pose rules for the image model. Reference photos must not override these. */
+export function compositionImageDirective(template: CompositionTemplate) {
+  const count = template.count === 'single'
+    ? '画面中只能出现 1 件商品。如果商品是鞋，只画一只鞋，禁止画成一双、两只并排、叠放或前后两只。'
+    : '画面中必须是一对商品。如果商品是鞋，必须是两只鞋并排，禁止只画一只。';
+  const facing = {
+    left: '纯侧面。商品前端（鞋头、瓶口等朝前的一端）指向画面左侧。禁止前端朝右，禁止正面，禁止四分之三角度。',
+    right: '纯侧面。商品前端（鞋头、瓶口等朝前的一端）指向画面右侧。禁止前端朝左，禁止正面，禁止四分之三角度。',
+    front: '正面朝向镜头。禁止纯侧面，禁止四分之三角度。',
+    threeQuarter: '四分之三侧面，前端朝左前方。禁止纯正面，禁止前端朝右。',
+  }[template.facing];
+  const scale = {
+    small: '主体约占画面宽度 45%。',
+    medium: '主体约占画面宽度 60%。',
+    large: '主体约占画面宽度 75%。',
+  }[template.scale];
+  return [
+    '硬性构图（高于所有参考图和母版，必须执行）：',
+    count,
+    facing,
+    `${scale}主体居中，四周留白。`,
+    '参考图和母版只用于确认颜色、Logo、外形和部件。它们如果是一双、正面或朝向不同，也必须改成上面的数量和朝向。禁止镜像翻转。',
+  ].join('\n');
+}
+
 export const adoptedMainSkuName = (name: string) => name.replace(/ · 已采用主图.*$/, '');
 export const factsProductName = (facts: string) => /商品：([^；\n]+)/.exec(facts)?.[1];
