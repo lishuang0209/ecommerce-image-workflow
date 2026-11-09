@@ -798,6 +798,8 @@
         "videoWaitHint": "脚本需要多次模型调用，约需 1-2 分钟，请稍候。",
         "videoGeneratingDesignLabel": "正在生成商品与模特设定图",
         "videoDesignEmpty": "还没有设定图。生成商品与模特的四视图设定图。",
+        "videoDesignCharacters": "角色",
+        "videoDesignSettings": "场景",
         "videoGenerateDesign": "生成商品与模特",
         "videoRerunDesign": "重新生成商品与模特",
         "videoConfirmDesign": "确认商品与模特并继续",

@@ -277,11 +277,10 @@ export function EcommerceVideoPanel({
     script && !script.episodes?.length
       ? script.original_text || script.meta?.original_text || ''
       : '';
-  const designAssets = [
+  const designHasImages = [
     ...(design?.characters ?? []),
     ...(design?.settings ?? []),
-  ];
-  const designHasImages = designAssets.some((asset) => asset.selected);
+  ].some((asset) => asset.selected);
 
   return (
     <div className="pointer-events-auto absolute left-4 top-4 z-40 w-[460px] max-w-[calc(100%_-_32px)] text-[var(--beat-text-1)]">
@@ -448,7 +447,7 @@ export function EcommerceVideoPanel({
                   <button
                     type="button"
                     disabled={busy || offline}
-                    className="min-h-10 flex-1 rounded-lg bg-[var(--beat-accent)] px-3 text-xs font-medium text-black disabled:opacity-40"
+                    className="min-h-10 flex-1 rounded-lg border border-white/15 px-3 text-xs text-white/70 hover:bg-white/5 disabled:opacity-40"
                     onClick={() => void runScript()}
                   >
                     {busy ? t('videoStatusRunning') : t('videoRerunScript')}
@@ -491,17 +490,61 @@ export function EcommerceVideoPanel({
                 </div>
 
                 {designHasImages ? (
-                  <div className="grid grid-cols-3 gap-1.5">
-                    {designAssets.map((asset) =>
-                      asset.selected ? (
-                        <img
-                          key={asset.id}
-                          src={asset.selected}
-                          alt={asset.name}
-                          className="aspect-square w-full rounded bg-white/5 object-contain"
-                        />
-                      ) : null
-                    )}
+                  <div className="space-y-2">
+                    {(design?.characters ?? []).length > 0 ? (
+                      <div>
+                        <p className="mb-1 text-[10px] text-white/45">
+                          {t('videoDesignCharacters')} ·{' '}
+                          {design?.characters?.length}
+                        </p>
+                        <div className="grid grid-cols-3 gap-1.5">
+                          {(design?.characters ?? []).map((asset) => (
+                            <figure key={asset.id} className="min-w-0">
+                              {asset.selected ? (
+                                <img
+                                  src={asset.selected}
+                                  alt={asset.name}
+                                  className="aspect-square w-full rounded bg-white/5 object-contain"
+                                />
+                              ) : null}
+                              <figcaption className="mt-1 truncate text-center text-[10px] text-white/55">
+                                {asset.name}
+                                {(asset.versions?.length ?? 0) > 1
+                                  ? ` ×${asset.versions?.length}`
+                                  : ''}
+                              </figcaption>
+                            </figure>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+                    {(design?.settings ?? []).length > 0 ? (
+                      <div>
+                        <p className="mb-1 text-[10px] text-white/45">
+                          {t('videoDesignSettings')} ·{' '}
+                          {design?.settings?.length}
+                        </p>
+                        <div className="grid grid-cols-3 gap-1.5">
+                          {(design?.settings ?? []).map((asset) => (
+                            <figure key={asset.id} className="min-w-0">
+                              {asset.selected ? (
+                                <img
+                                  src={asset.selected}
+                                  alt={asset.name}
+                                  className="aspect-square w-full rounded bg-white/5 object-contain"
+                                />
+                              ) : null}
+                              <figcaption className="mt-1 truncate text-center text-[10px] text-white/55">
+                                {asset.name}
+                                {(asset.versions?.length ?? 0) > 1
+                                  ? ` ×${asset.versions?.length}`
+                                  : ''}
+                              </figcaption>
+                            </figure>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
                   </div>
                 ) : (
                   <p className="text-[11px] leading-5 text-white/45">

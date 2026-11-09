@@ -798,6 +798,8 @@
         "videoWaitHint": "The script makes several model calls and takes about 1-2 minutes.",
         "videoGeneratingDesignLabel": "Generating product and model design",
         "videoDesignEmpty": "No design images yet. Generate four-view design images for the product and models.",
+        "videoDesignCharacters": "Characters",
+        "videoDesignSettings": "Settings",
         "videoGenerateDesign": "Generate product and model",
         "videoRerunDesign": "Regenerate product and model",
         "videoConfirmDesign": "Confirm product and model, continue",
