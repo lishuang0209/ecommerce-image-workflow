@@ -1,7 +1,7 @@
 # 电商视频集成 — 开发交接文档
 
 > 面向接手本仓库（BeatDesign 二开分支）继续开发「电商视频」功能的开发者 / AI 编程工具。
-> 最后更新：P0 + P1 + P2 完成，P3–P6 待做。
+> 最后更新：P0–P6 源码已接入。P3 自动化与隔离数据库集成测试已通过，真实模型生成与浏览器交互尚未验证。
 
 ---
 
@@ -28,10 +28,10 @@
 | P0 骨架 | ✅ 完成 | sidecar 通信、会话映射、面板挂载 |
 | P1 广告脚本 | ✅ 完成 | 脚本生成 + 实时进度 + 画布文本卡 |
 | P2 商品与模特 | ✅ 完成 | 设定图生成 + 图片导入画布 + 缩略图 |
-| P3 广告分镜 | ⬜ 待做 | storyboard，纯文本产物（类似 P1） |
-| P4 画面 | ⬜ 待做 | reference_generation，图片产物（复用 P2 导入） |
-| P5 视频 | ⬜ 待做 | video_generation，视频文件产物（新：视频导入） |
-| P6 成片 | ⬜ 待做 | post_production，MP4 导入 + 编辑器 |
+| P3 广告分镜 | ✅ 源码已接入 | 分镜生成/重生成、轮询、文本卡导入、确认；真实模型与浏览器交互待验证 |
+| P4 画面 | ✅ 源码已接入 | 每片段首帧、重生成、本地导入、确认和过期保护；真实模型与浏览器待验证 |
+| P5 视频 | ✅ 源码已接入 | 片段视频生成/重生成、MP4 本地导入、播放预览和确认 |
+| P6 成片 | ✅ 源码已接入 | 按分镜顺序合成、独立版本、本地导入、预览下载和确认；未自动创建编辑器时间线 |
 
 已提交并推送到 `origin/feature/ecommerce-video`：
 
@@ -81,7 +81,7 @@ BeatDesign (3020 dev / 3021 prod)
 
 - Node 22+、pnpm 10（本机用 `npx pnpm@10.32.1`）
 - shortfilm-agent 后端（Python 3.12 + uv）
-- **ffmpeg 未安装**（P6 成片阶段需要，`brew install ffmpeg`）
+- shortfilm 后端通过 `imageio-ffmpeg` 依赖获得 FFmpeg，无需全局安装；运行 `uv sync` 会安装。
 
 ### 启动 BeatDesign
 
@@ -143,7 +143,7 @@ SHORTFILM_LLM_MODEL / SHORTFILM_VLM_MODEL / SHORTFILM_IMAGE_T2I_MODEL / ...
 |---|---|
 | `backend/core/agents/script_agent.py` | ① 脚本生成（约 8 次串行 LLM 调用，~2 分钟） |
 | `backend/core/agents/character_agent.py` | ② 角色/场景设定图（图模型 + VLM 评估，产物 `characters[]`/`settings[]`） |
-| `backend/core/agents/storyboard_agent.py` | ③ 分镜（待接入） |
+| `backend/core/agents/storyboard_agent.py` + `backend/scenarios/ecommerce_ad/agents.py` | ③ 分镜（电商适配读取最新设定，支持显式重生成） |
 | `backend/core/agents/reference_agent.py` | ④ 参考图/画面（待接入） |
 | `backend/core/agents/video_agent.py` | ⑤ 视频（待接入） |
 | `backend/core/agents/editor_agent.py` | ⑥ 成片（ffmpeg，待接入） |
@@ -205,35 +205,57 @@ POST {action:'continue', stage, locale}   → 确认阶段，写 confirmedStages
 - [x] 刷新/重启后状态恢复（sidecar + shortfilm 状态查询）
 - [x] 重新生成需确认弹窗（防误触发扣费）
 - [x] 三语文案（zh/en/ja）+ i18n 校验
+- [x] 画布关联自动同步：商品信息→脚本→设定→分镜→首帧→片段视频→所属版本成片；旧项目打开时补齐，保留位置与手动引用，重复同步不新增版本。画布文本修改仍不会直接写回 shortfilm。
+- [x] 每个角色/场景单独修改名称和描述、单独重生成，结果更新原画布卡片
+- [x] P3 分镜生成/重生成、进度轮询、完整分镜文本与画布卡片、确认及刷新恢复（自动化验证）
+- [x] 上游改动失效分镜确认；过期或不完整的分镜不能确认
+- [x] 分镜结构化编辑与删除：版本标题、场景、人物、镜头景别/时长/内容；支持删除镜头和整个片段，保存同步后端与原画布卡片，不调用模型，需重新确认
+- [ ] P3 真实模型生成与浏览器交互验证
 
 ---
 
-## 8. 待办（P3–P6）
+## 8. P3 实现与待办（P4–P6）
 
-### P3 广告分镜（storyboard，纯文本，最接近 P1）
+### P3 广告分镜（源码已接入，真实模型/浏览器待验证）
 
-1. `shortfilm-contract.ts`：加 `SHORTFILM_STORYBOARD_STAGE`、storyboard artifact 类型、`storyboardIsReady`、`storyboardCardName`
-2. `shortfilm-client.ts`：加 `getShortfilmStoryboard`
-3. `ecommerce-video.ts`：run/continue 支持 `storyboard` 阶段；导入 storyboard 文本卡
-4. 面板：脚本+设计确认后显示「生成广告分镜」，产物展示（分镜文本）
+- 确认广告脚本与商品/模特后，可生成广告分镜；支持重生成和 2 秒进度轮询。
+- `ShortfilmStoryboardArtifact` 保留 `episodes[] → segments[] → shots[]`；面板和画布文本卡都展示场景、人物、时长、景别和内容。
+- 分镜面板提供「修改分镜」「保存分镜」；编辑保存以当前分镜摘要作为版本校验，拒绝过期覆盖；保留剩余片段 ID 和镜头元数据，删除后重排显示编号，片段总时长由镜头时长自动汇总（每镜头 2–15 秒、每片段 5–15 秒）。
+- 画布稳定卡片 ID 为 `video-ad-storyboard`；重生成更新同一张卡片并保留位置。
+- `shortfilm-session.ts` 增加 `storyboardStale`：脚本或设定修改/重生成会清除该阶段及下游确认，并要求分镜重新生成；后端会拒绝直接确认过期或不完整的产物。
+- shortfilm 的电商场景将 storyboard Agent 替换为 `scenarios.ecommerce_ad.agents:EcommerceStoryboardAgent`。它在本次输入副本中合并最新设定，接受 execute body `{regenerate:true}` 跳过缓存；共享 Agent 与其它场景不变。
+- 角色与场景的名称修改会同步到本次分镜的脚本文本副本，原始脚本保留。
+- `continue` 只对 `current_stage` 操作；确认较早阶段时，由 sidecar 校验并记录，避免误确认当前的较后阶段。
+- 编辑框提供「删除片段」「删除镜头」，删除最后一个镜头会移除空片段；每个版本至少保留一个完整片段。删除只在保存后生效，取消会丢弃草稿。保存接口保留旧版本冲突校验，允许修复历史空片段。shortfilm 后端同步移除已删片段的参考图/视频任务引用，保留历史媒体文件。
+- 确认分镜后可主动生成画面，不自动触发模型。
+- 分镜编辑保持左侧原位展开，用分隔线代替嵌套卡片，支持片段折叠、固定保存栏和最近一次删除撤销。
 
-### P4 画面（reference_generation，图片，复用 P2 导入）
+验证：BeatDesign `typecheck`、`i18n:check`、590 项测试（585 通过、5 跳过、0 失败）；shortfilm `pytest` 38 项通过。新增隔离数据库路由测试覆盖前置确认、生成/重生成、文本卡持久化、刷新恢复、失败与过期保护，模型调用使用测试替身。浏览器工具报 `timeoutMs` 连接错误，浏览器交互和真实付费模型生成未验证。
 
-1. 加 `reference_generation` 阶段支持（结构同 P2）
-2. 产物是每片段一张首帧图（`scenes[]`，id = segment_id），用 `importShortfilmImage` 导入
-3. 面板展示画面缩略图
+### P4 画面（源码已接入）
 
-### P5 视频（video_generation，视频文件，新工作）
+- 确认完整且未过期的分镜后，点击「生成画面」为每个片段生成首帧；支持进度轮询、整批重生成和确认。
+- 使用既有 `intervene` 的 `regenerate_scenes`；先清理旧画面提示词，按最新分镜重新生成。检查每片段确有新版本，避免把保留的旧图片当作本轮成功。
+- 图片经 `importShortfilmImage` 下载到项目本地素材库，使用 Command Kernel 更新稳定 ID `video-reference-{segment_id}` 的画布卡片，保留位置。面板只使用已导入的本地图片地址。
+- sidecar `referenceStale` 在脚本、设定、分镜修改或重生成时置为 true；画面生成或导入失败也不清除此标记。全部新图导入成功后才允许确认。旧素材保留，不自动触发下一阶段。
+- 隔离数据库路由测试覆盖前置确认、图片持久化、重生成更新同一卡片和选中版本、失败保护、刷新恢复与分镜编辑失效。未调用真实模型；浏览器控制工具连接异常，交互实测待完成。
 
-1. 加 `video_generation` 阶段支持
-2. 产物是 `clips[]`（mp4 文件），需要**视频导入**（扩展 `import-shortfilm-assets.ts` 支持 `type:'video'`，mime `video/mp4`）
-3. 面板展示视频（`<video>` 标签）
+### P5 视频（源码已接入）
 
-### P6 成片（post_production，ffmpeg，MP4）
+- 确认当前画面后生成所有片段视频，支持整批重生成、状态轮询、播放预览和确认。
+- 生成前同步最新分镜内容与时长，调用 `regenerate_clips`，验证每片段确有新版本并显式更新选中版本。
+- `importShortfilmVideo` 下载 MP4 并检查容器标识，写入项目本地素材库；稳定卡片 `video-clip-{segment_id}` 更新时保留位置。面板通过本地媒体 URL 播放。
+- `videoStale` 在上游修改、画面重生成及视频生成/导入失败后阻止确认；保留旧媒体。
+- 自动化覆盖前置确认、本地导入、时长、刷新恢复、重生成、无新版本及无效 MP4 拒绝。未调用真实视频模型。
 
-1. 加 `post_production` 阶段支持
-2. **需要先装 ffmpeg**（`brew install ffmpeg`），否则成片必失败
-3. 产物是 `final_videos[]`（拼接后的 MP4），导入后进 Assets，可选进 Editor 时间线
+### P6 成片（源码已接入）
+
+- 确认全部当前视频后合成，每个广告版本输出一个 MP4；支持重新合成、播放、下载和最终确认。
+- 电商场景专属 `EcommerceVideoEditorAgent` 严格按当前分镜的片段顺序取选中视频，缺片直接拒绝，不跳过。每轮独立输出目录，保留历史成片。共享后期 Agent 和其它场景不变。
+- FFmpeg 来自 `imageio-ffmpeg` Python 依赖；无须系统安装。真实临时红/蓝片段测试验证了顺序、可解码输出、带引号路径、历史版本保留和缺片保护。
+- `finalStale` 在任一上游变化或合成/导入失败时阻止确认；稳定卡片 `video-final-episode-{number}` 更新后保持位置。
+- 成片进入同一项目素材库，可用于现有编辑器；本次未自动创建时间线。
+- 六阶段类型、三语文案、隔离数据库路由与后端测试已覆盖；真实付费图像/视频模型链路和浏览器交互未实测。
 
 ---
 
@@ -254,7 +276,7 @@ POST {action:'continue', stage, locale}   → 确认阶段，写 confirmedStages
 
 ### 坑
 
-1. **ffmpeg 未装**：P6 成片会失败，先 `brew install ffmpeg`。
+1. **成片依赖**：shortfilm 后端需要先 `uv sync` 安装 `imageio-ffmpeg`，然后重启以加载电商场景新 Agent。
 2. **shortfilm `continue` 不推进 current_stage**：用 `confirmedStages` 自己管（见 §6）。
 3. **生产版 3021 是旧 build**：改完必须 `build` + 重启 3021，否则页面不更新。
 4. **脚本生成慢**：约 8 次串行 LLM 调用，~2 分钟（见 shortfilm `script_agent.py`，质量优先设计，暂不优化）。
@@ -273,7 +295,7 @@ POST {action:'continue', stage, locale}   → 确认阶段，写 confirmedStages
 | shortfilm-agent | `/Users/xiaoxiao/shortfilm-agent`（backend :8000） |
 | Node / pnpm | v24 / 10.32.1（用 `npx pnpm@10.32.1`） |
 | 端口 | BeatDesign dev 3020、prod 3021；shortfilm 8000 |
-| ffmpeg | ❌ 未安装 |
+| ffmpeg | ✅ 项目 Python 依赖 `imageio-ffmpeg` 提供；真实合成测试通过 |
 | 模型 | llm/vlm=qwen3.5-plus, image=wan2.7-image, video=wan2.7-i2v |
 
 ---
@@ -291,5 +313,5 @@ curl -o /dev/null -w "%{http_code}" http://127.0.0.1:3020/   # BeatDesign 200
 
 # 3. 跑测试
 cd "/Users/xiaoxiao/Documents/生图生视频测试题/work/repos/BeatDesign"
-npx pnpm@10.32.1 test        # 575 测试，570 通过，0 失败
+npx pnpm@10.32.1 test        # P3 检查：590 项，585 通过，5 跳过，0 失败
 ```

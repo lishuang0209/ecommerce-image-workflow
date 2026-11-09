@@ -41,27 +41,32 @@ export type ImportedShortfilmImage = {
   sizeBytes: number;
 };
 
-export async function importShortfilmImage({
+async function importShortfilmMedia({
   projectId,
   url,
   filename,
   metadata,
+  mediaType = 'image',
 }: {
   projectId: string;
   url: string;
+  mediaType?: 'image' | 'video';
   filename?: string;
   metadata?: Record<string, unknown>;
 }): Promise<ImportedShortfilmImage> {
   const response = await fetch(url, { signal: AbortSignal.timeout(120_000) });
   if (!response.ok) {
-    throw new Error(`Failed to download shortfilm image (${response.status}).`);
+    throw new Error(`Failed to download shortfilm media (${response.status}).`);
   }
   const bytes = new Uint8Array(await response.arrayBuffer());
   if (bytes.byteLength === 0) {
-    throw new Error('Downloaded image is empty.');
+    throw new Error('Downloaded media is empty.');
   }
 
-  const mimeType = mimeFromUrl(url);
+  const mimeType = mediaType === 'video' ? 'video/mp4' : mimeFromUrl(url);
+  if (mediaType === 'video' && (bytes.length < 12 || new TextDecoder().decode(bytes.slice(4, 8)) !== 'ftyp')) {
+    throw new Error('Downloaded video is not a valid MP4 container.');
+  }
   const persisted = await persistLocalProjectAsset({
     projectId,
     filename: filename ?? basename(url),
@@ -70,7 +75,7 @@ export async function importShortfilmImage({
   });
   const assetId = await recordUserAsset({
     id: persisted.assetId,
-    type: 'image',
+    type: mediaType,
     source: 'provider',
     storageProvider: 'local',
     bucket: LOCAL_PROJECT_ASSET_BUCKET,
@@ -93,3 +98,7 @@ export async function importShortfilmImage({
     sizeBytes: persisted.sizeBytes,
   };
 }
+
+type ImportInput = Omit<Parameters<typeof importShortfilmMedia>[0], 'mediaType'>;
+export const importShortfilmImage = (input: ImportInput) => importShortfilmMedia({ ...input, mediaType: 'image' });
+export const importShortfilmVideo = (input: ImportInput) => importShortfilmMedia({ ...input, mediaType: 'video' });

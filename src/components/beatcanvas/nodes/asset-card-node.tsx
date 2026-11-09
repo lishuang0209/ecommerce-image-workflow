@@ -53,7 +53,10 @@ export function AssetCardNode({
     clipCount,
   } = props;
   const shapeCopy = getBeatCanvasNodeCopy();
-  const isContain = fitMode === 'contain';
+  // Shortfilm references must show the full composition, including existing
+  // saved nodes whose frame was created with the default cover fit.
+  const isContain =
+    fitMode === 'contain' || id.startsWith('video-reference-');
   const isFrameless = chromeMode === 'frameless';
   const hasOuterChrome = !isFrameless;
   const [mediaStatus, setMediaStatus] = useState<

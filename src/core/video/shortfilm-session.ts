@@ -11,6 +11,11 @@ export type ShortfilmSessionRecord = {
   createdAt: string;
   /** Stage ids the user has already confirmed and advanced past. */
   confirmedStages?: string[];
+  /** Upstream edits or a failed rerun require a fresh storyboard before confirmation. */
+  storyboardStale?: boolean;
+  referenceStale?: boolean;
+  videoStale?: boolean;
+  finalStale?: boolean;
 };
 
 const sessionRoot = () => resolve(getBeatDesignDataRoot(), 'shortfilm-sessions');

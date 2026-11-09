@@ -1,7 +1,11 @@
 import type {
   ShortfilmDesignArtifact,
+  ShortfilmReferenceArtifact,
+  ShortfilmVideoArtifact,
+  ShortfilmFinalArtifact,
   ShortfilmScriptArtifact,
   ShortfilmStatus,
+  ShortfilmStoryboardArtifact,
 } from './shortfilm-contract';
 
 const DEFAULT_BASE_URL = 'http://127.0.0.1:8000';
@@ -161,14 +165,15 @@ export async function getShortfilmDesign(
 export async function runShortfilmStage(
   sessionId: string,
   stage: string,
-  timeoutMs = 300_000
+  timeoutMs = 300_000,
+  input: Record<string, unknown> = {}
 ): Promise<void> {
   const response = await fetch(
     `${getShortfilmBaseUrl()}/api/project/${encodeURIComponent(sessionId)}/execute/${encodeURIComponent(stage)}`,
     {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({}),
+      body: JSON.stringify(input),
       signal: AbortSignal.timeout(timeoutMs),
     }
   );
@@ -190,4 +195,119 @@ export async function continueShortfilm(
     `/api/project/${encodeURIComponent(sessionId)}/continue`,
     { method: 'POST', body: JSON.stringify({}) }
   );
+}
+
+/** Persist one design edit without invoking a model. */
+export async function updateShortfilmDesignAsset(
+  sessionId: string,
+  group: 'characters' | 'settings',
+  asset: { id: string; name: string; description: string; selected?: string }
+): Promise<void> {
+  await request(
+    `/api/project/${encodeURIComponent(sessionId)}/artifact/character_design`,
+    { method: 'PATCH', body: JSON.stringify({ [group]: [asset] }) }
+  );
+}
+
+/** Regenerate only the selected asset, preserving the other design outputs. */
+export async function regenerateShortfilmDesignAsset(
+  sessionId: string,
+  group: 'characters' | 'settings',
+  asset: { id: string; name: string; description: string }
+): Promise<void> {
+  const response = await fetch(
+    `${getShortfilmBaseUrl()}/api/project/${encodeURIComponent(sessionId)}/intervene`,
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        stage: 'character_design',
+        modifications: {
+          [`regenerate_${group}`]: [asset.id],
+          update_descriptions: { [group]: { [asset.id]: { name: asset.name, description: asset.description } } },
+        },
+      }),
+      signal: AbortSignal.timeout(300_000),
+    }
+  );
+  if (!response.ok) {
+    throw new ShortfilmRequestError(await response.text(), response.status);
+  }
+  await response.text();
+}
+
+
+export async function getShortfilmStoryboard(sessionId: string): Promise<ShortfilmStoryboardArtifact> {
+  const response = await getShortfilmArtifact<ShortfilmStoryboardArtifact>(sessionId, 'storyboard');
+  return response.artifact ?? {};
+}
+
+
+/** Save a manual storyboard edit without executing a generation stage. */
+export async function updateShortfilmStoryboard(
+  sessionId: string,
+  artifact: ShortfilmStoryboardArtifact
+): Promise<void> {
+  await request(`/api/project/${encodeURIComponent(sessionId)}/artifact/storyboard`, {
+    method: 'PATCH', body: JSON.stringify({ episodes: artifact.episodes }),
+  });
+}
+
+export async function getShortfilmReferences(sessionId: string): Promise<ShortfilmReferenceArtifact> {
+  try {
+    return (await getShortfilmArtifact<ShortfilmReferenceArtifact>(sessionId, 'reference_generation')).artifact ?? {};
+  } catch (error) {
+    if (error instanceof ShortfilmRequestError && error.status === 404) return {};
+    throw error;
+  }
+}
+
+export async function updateShortfilmReferences(sessionId: string, scenes: Array<{ id: string; selected?: string; visual_prompt?: string }>): Promise<void> {
+  await request(`/api/project/${encodeURIComponent(sessionId)}/artifact/reference_generation`, {
+    method: 'PATCH', body: JSON.stringify({ scenes }),
+  });
+}
+
+export async function regenerateShortfilmReferences(sessionId: string, ids: string[]): Promise<void> {
+  const response = await fetch(`${getShortfilmBaseUrl()}/api/project/${encodeURIComponent(sessionId)}/intervene`, {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ stage: 'reference_generation', modifications: { regenerate_scenes: ids } }),
+    signal: AbortSignal.timeout(900_000),
+  });
+  if (!response.ok) throw new ShortfilmRequestError(await response.text(), response.status);
+  await response.text();
+}
+
+export async function getShortfilmVideos(sessionId: string): Promise<ShortfilmVideoArtifact> {
+  try {
+    return (await getShortfilmArtifact<ShortfilmVideoArtifact>(sessionId, 'video_generation')).artifact ?? {};
+  } catch (error) {
+    if (error instanceof ShortfilmRequestError && error.status === 404) return {};
+    throw error;
+  }
+}
+
+export async function updateShortfilmVideos(sessionId: string, clips: Array<{ id: string; selected?: string; description?: string; duration?: number }>): Promise<void> {
+  await request(`/api/project/${encodeURIComponent(sessionId)}/artifact/video_generation`, {
+    method: 'PATCH', body: JSON.stringify({ clips }),
+  });
+}
+
+export async function regenerateShortfilmVideos(sessionId: string, ids: string[]): Promise<void> {
+  const response = await fetch(`${getShortfilmBaseUrl()}/api/project/${encodeURIComponent(sessionId)}/intervene`, {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ stage: 'video_generation', modifications: { regenerate_clips: ids } }),
+    signal: AbortSignal.timeout(1_800_000),
+  });
+  if (!response.ok) throw new ShortfilmRequestError(await response.text(), response.status);
+  await response.text();
+}
+
+export async function getShortfilmFinal(sessionId: string): Promise<ShortfilmFinalArtifact> {
+  try {
+    return (await getShortfilmArtifact<ShortfilmFinalArtifact>(sessionId, 'post_production')).artifact ?? {};
+  } catch (error) {
+    if (error instanceof ShortfilmRequestError && error.status === 404) return {};
+    throw error;
+  }
 }
