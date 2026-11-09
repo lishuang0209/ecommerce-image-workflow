@@ -504,9 +504,6 @@ class WorkflowEngine:
                         "name": f"第{ep_n}集-片段{s_i}"
                     })
             
-            if not all_sync_clips:
-                return
-
             # (A) 同步到第四阶段 (参考图生成)
             ref_stage_key = WorkflowStage.REFERENCE_GENERATION.value
             if self.has_stage(state, ref_stage_key):
@@ -527,7 +524,8 @@ class WorkflowEngine:
         if not isinstance(ref_art, dict):
             ref_art = {"scenes": [], "version": 1}
         
-        existing_scenes = ref_art.get("scenes", [])
+        active_ids = {item["segment_id"] for item in all_sync_clips}
+        existing_scenes = [item for item in ref_art.get("scenes", []) if item.get("id") in active_ids]
         for c_info in all_sync_clips:
             id = c_info["segment_id"]
             idx = next((i for i, s in enumerate(existing_scenes) if s.get("id") == id), -1)
@@ -550,7 +548,7 @@ class WorkflowEngine:
                 existing_scenes[idx]["name"] = c_info["name"]
         
         # 排序：确保片段显示顺序正确 (按 id 排序，例如 seg_01_01 < seg_07_01)
-        existing_scenes.sort(key=lambda x: x.get("id", ""))
+        existing_scenes.sort(key=lambda x: (x.get("episode", 0), x.get("index", 0)))
         ref_art["scenes"] = existing_scenes
         state.artifacts[ref_stage_key] = ref_art
 
@@ -560,7 +558,8 @@ class WorkflowEngine:
         if not isinstance(video_art, dict):
             video_art = {"clips": [], "version": 1}
         
-        existing_clips = video_art.get("clips", [])
+        active_ids = {item["segment_id"] for item in all_sync_clips}
+        existing_clips = [item for item in video_art.get("clips", []) if item.get("id") in active_ids]
         for c_info in all_sync_clips:
             id = c_info["segment_id"]
             idx = next((i for i, c in enumerate(existing_clips) if c.get("id") == id), -1)
@@ -584,7 +583,7 @@ class WorkflowEngine:
                 existing_clips[idx]["name"] = c_info["name"]
         
         # 排序：确保片段显示顺序正确
-        existing_clips.sort(key=lambda x: x.get("id", ""))
+        existing_clips.sort(key=lambda x: (x.get("episode", 0), x.get("index", 0)))
         video_art["clips"] = existing_clips
         state.artifacts[video_stage_key] = video_art
 
@@ -1122,6 +1121,12 @@ class WorkflowEngine:
 
     def _apply_artifact_update(self, state: WorkflowState, stage: str, body: Dict[str, Any]):
         """Apply a user edit to in-memory artifacts before the session is persisted."""
+        if stage == "storyboard" and "episodes" in body:
+            from core.storyboard_edits import normalize_storyboard_edits
+
+            if any(value == "running" for value in state.status.values()):
+                raise RuntimeError("请等待当前生成任务结束后再保存分镜。")
+            body = {**body, "episodes": normalize_storyboard_edits(body["episodes"])}
         merge_keys_by_stage = {
             "character_design": ("characters", "settings"),
             "reference_generation": ("scenes",),
@@ -1292,6 +1297,9 @@ class WorkflowEngine:
             current.update(body)
         else:
             state.artifacts[stage] = body
+
+        if stage == "storyboard" and "episodes" in body:
+            self._sync_artifacts_cross_stages(state, WorkflowStage.STORYBOARD, state.artifacts[stage])
 
     def upload_artifact_image(
         self,

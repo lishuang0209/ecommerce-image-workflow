@@ -1257,8 +1257,11 @@ class StoryboardAgent(AgentInterface):
         
         # 处理人工干预/修改
         if intervention and "modified_storyboard" in intervention:
+            from core.storyboard_edits import normalize_storyboard_edits
+
             modified_episodes = intervention["modified_storyboard"]
             if isinstance(modified_episodes, str): modified_episodes = json.loads(modified_episodes)
+            modified_episodes = normalize_storyboard_edits(modified_episodes)
             return {
                 "payload": {
                     "session_id": sid,
