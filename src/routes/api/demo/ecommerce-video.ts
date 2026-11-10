@@ -1,3 +1,5 @@
+import { uploadShortfilmReference } from '@/core/video/shortfilm-client';
+import { isSupportedRasterImage } from '@/lib/image-upload-validation';
 import { createHash, randomUUID } from 'node:crypto';
 
 import { createFileRoute } from '@tanstack/react-router';
@@ -78,9 +80,10 @@ import {
 } from '@/core/video/shortfilm-session';
 import {
   readRequestJsonWithLimit,
+  readRequestFormDataWithLimit,
   RequestBodyTooLargeError,
 } from '@/lib/request-body-limit';
-import { validateTrustedWorkspaceJsonMutation } from '@/lib/trusted-local-request';
+import { validateTrustedWorkspaceMutation, validateTrustedWorkspaceJsonMutation } from '@/lib/trusted-local-request';
 
 import { buildShortfilmCanvasLinks } from '@/core/video/shortfilm-canvas-links';
 import { mergeStoryboardEdits, storyboardEditSchema } from '@/core/video/shortfilm-storyboard-edit';
@@ -145,6 +148,9 @@ const saveStoryboardSchema = z.object({
 
 const bodySchema = z.discriminatedUnion('action', [
   startSchema,
+  z.object({ projectId: z.string().uuid(), action: z.literal('frame_asset'), sceneId: z.string().min(1).max(200), operation: z.enum(['save', 'regenerate', 'select']), prompt: z.string().trim().min(1).max(12000).optional(), version: z.string().min(1).max(2000).optional(), locale: localeSchema }).strict(),
+  z.object({ projectId: z.string().uuid(), action: z.literal('upload_frame'), sceneId: z.string().min(1).max(200), locale: localeSchema }).strict(),
+  z.object({ projectId: z.string().uuid(), action: z.literal('video_clip'), operation: z.enum(['save', 'select', 'regenerate']).optional(), version: z.string().max(2000).optional(), clipId: z.string().min(1).max(200), description: z.string().trim().min(1).max(12000).optional(), locale: localeSchema }).strict(),
   z.object({ projectId: z.string().uuid(), action: z.literal('sync_canvas'), locale: localeSchema }).strict(),
   designAssetSchema,
   saveStoryboardSchema,
@@ -325,7 +331,8 @@ async function readState(projectId: string) {
     const saved = await loadProjectWithLatestSnapshot({ projectId });
     reference = { scenes: (raw.scenes ?? []).map((scene) => ({ ...scene,
       selected: saved?.snapshot.cards.find((card) => card.id === `video-reference-${scene.id}`)?.url ?? undefined,
-      versions: undefined,
+      selectedVersion: scene.selected ? shortfilmAssetUrl(scene.selected) : undefined,
+      versions: (scene.versions ?? []).map(shortfilmAssetUrl),
     })) };
   } catch { /* Not generated yet. */ }
 
@@ -335,7 +342,8 @@ async function readState(projectId: string) {
     const saved = await loadProjectWithLatestSnapshot({ projectId });
     video = { clips: (raw.clips ?? []).map((scene) => ({ ...scene,
       selected: saved?.snapshot.cards.find((card) => card.id === `video-clip-${scene.id}`)?.url ?? undefined,
-      versions: undefined,
+      selectedVersion: scene.selected ? shortfilmAssetUrl(scene.selected) : undefined,
+      versions: (scene.versions ?? []).map(shortfilmAssetUrl),
     })) };
   } catch { /* Not generated yet. */ }
 
@@ -360,6 +368,8 @@ async function readState(projectId: string) {
     finalStale: session.finalStale ?? true,
     video,
     videoStale: session.videoStale ?? true,
+    staleVideoIds: session.videoStale === false ? [] : session.staleVideoIds ??
+      (storyboard?.episodes ?? []).flatMap((episode) => (episode.segments ?? []).map((segment) => segment.segment_id)),
     reference,
     referenceStale: session.referenceStale ?? true,
     storyboardRevision: storyboard ? storyboardRevision(storyboard) : null,
@@ -596,14 +606,32 @@ async function GET({ request }: { request: Request }) {
 }
 
 async function POST({ request }: { request: Request }) {
-  const trust = validateTrustedWorkspaceJsonMutation(request);
+  const multipart = request.headers.get('content-type')?.startsWith('multipart/form-data');
+  const trust = multipart ? validateTrustedWorkspaceMutation(request) : validateTrustedWorkspaceJsonMutation(request);
   if (!trust.ok) {
     return Response.json({ error: trust.message }, { status: trust.status });
   }
 
   let payload: unknown;
+  let uploadedFile: File | undefined;
   try {
-    payload = await readRequestJsonWithLimit(request, MAX_REQUEST_BYTES);
+    if (multipart) {
+      const form = await readRequestFormDataWithLimit(request, 25 * 1024 * 1024 + 64 * 1024);
+      const file = form.get('file');
+      if (!(file instanceof File) || !file.size || file.size > 25 * 1024 * 1024) {
+        return Response.json({ error: 'Choose an image smaller than 25 MB.' }, { status: 400 });
+      }
+      const bytes = new Uint8Array(await file.slice(0, 40).arrayBuffer());
+      const ext = file.name.split('.').at(-1)?.toLowerCase();
+      const mime = ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : `image/${ext}`;
+      const valid = ext === 'bmp' ? bytes[0] === 0x42 && bytes[1] === 0x4d
+        : ['jpg', 'jpeg', 'png', 'webp'].includes(ext ?? '') && isSupportedRasterImage(mime, bytes);
+      if (!valid) return Response.json({ error: 'Unsupported image file.' }, { status: 400 });
+      uploadedFile = file;
+      payload = { projectId: form.get('projectId'), action: 'upload_frame', sceneId: form.get('sceneId'), locale: form.get('locale') ?? undefined };
+    } else {
+      payload = await readRequestJsonWithLimit(request, MAX_REQUEST_BYTES);
+    }
   } catch (error) {
     if (error instanceof RequestBodyTooLargeError) {
       return Response.json({ error: 'Request body is too large.' }, { status: 413 });
@@ -681,6 +709,65 @@ async function POST({ request }: { request: Request }) {
       return Response.json({ error: 'Wait for the current generation to finish.' }, { status: 409 });
     }
 
+    if (body.action === 'frame_asset') {
+      if (session.storyboardStale || !session.confirmedStages?.includes(SHORTFILM_STORYBOARD_STAGE)) {
+        return Response.json({ error: 'Confirm the current storyboard first.' }, { status: 409 });
+      }
+      const storyboard = await getShortfilmStoryboard(session.sessionId);
+      const previous = await getShortfilmReferences(session.sessionId);
+      const scene = previous.scenes?.find((item) => item.id === body.sceneId);
+      if (!scene || !(storyboard.episodes ?? []).some((episode) => episode.segments?.some((segment) => segment.segment_id === body.sceneId))) {
+        return Response.json({ error: 'Frame not found.' }, { status: 404 });
+      }
+      if (body.operation === 'save') {
+        if (!body.prompt) return Response.json({ error: 'A prompt is required.' }, { status: 400 });
+        await updateShortfilmReferences(session.sessionId, [{ id: scene.id, visual_prompt: body.prompt }]);
+        return Response.json({ state: await readState(body.projectId) });
+      }
+      let selected = body.operation === 'select'
+        ? (scene.versions ?? []).find((path) => shortfilmAssetUrl(path) === body.version) : undefined;
+      if (body.operation === 'select' && !selected) return Response.json({ error: 'Unknown frame version.' }, { status: 400 });
+      if (body.operation === 'select' && selected === scene.selected) return Response.json({ state: await readState(body.projectId) });
+      await writeShortfilmSession({ ...session, referenceStale: true, videoStale: true, staleVideoIds: session.videoStale !== false && session.staleVideoIds === undefined ? undefined : [...new Set([...(session.staleVideoIds ?? []), body.sceneId])], finalStale: true,
+        confirmedStages: confirmationsBeforeStage(session.confirmedStages, SHORTFILM_REFERENCE_STAGE) });
+      if (body.operation === 'regenerate') {
+        if (body.prompt) await updateShortfilmReferences(session.sessionId, [{ id: scene.id, visual_prompt: body.prompt }]);
+        await regenerateShortfilmReferences(session.sessionId, [scene.id]);
+        const status = await getShortfilmStatus(session.sessionId);
+        const current = (await getShortfilmReferences(session.sessionId)).scenes?.find((item) => item.id === scene.id);
+        const old = new Set([scene.selected, ...(scene.versions ?? [])]);
+        const fresh = (current?.versions ?? []).filter((path) => !old.has(path));
+        selected = current?.selected && fresh.includes(current.selected) ? current.selected : fresh.at(-1);
+        if (!referenceIsReady(status.status) || current?.status === 'failed' || !selected) throw new Error('Frame generation failed. Previous images are preserved.');
+      }
+      await updateShortfilmReferences(session.sessionId, [{ id: scene.id, selected }]);
+      const imported = await importDesignCards(body.projectId, { settings: [{ ...scene, selected }] }, body.locale, 'reference');
+      await writeShortfilmSession({ ...session, videoStale: true, staleVideoIds: session.videoStale !== false && session.staleVideoIds === undefined ? undefined : [...new Set([...(session.staleVideoIds ?? []), body.sceneId])], finalStale: true,
+        confirmedStages: confirmationsBeforeStage(session.confirmedStages, SHORTFILM_REFERENCE_STAGE) });
+      return Response.json({ ...imported, state: await readState(body.projectId) });
+    }
+
+    if (body.action === 'upload_frame') {
+      if (!uploadedFile) return Response.json({ error: 'An image file is required.' }, { status: 400 });
+      if (session.storyboardStale || !session.confirmedStages?.includes(SHORTFILM_STORYBOARD_STAGE)) {
+        return Response.json({ error: 'Confirm the current storyboard first.' }, { status: 409 });
+      }
+      const storyboard = await getShortfilmStoryboard(session.sessionId);
+      if (!(storyboard.episodes ?? []).some((episode) => episode.segments?.some((segment) => segment.segment_id === body.sceneId))) {
+        return Response.json({ error: 'Frame not found.' }, { status: 404 });
+      }
+      await writeShortfilmSession({ ...session, referenceStale: true, videoStale: true, staleVideoIds: session.videoStale !== false && session.staleVideoIds === undefined ? undefined : [...new Set([...(session.staleVideoIds ?? []), body.sceneId])], finalStale: true,
+        confirmedStages: confirmationsBeforeStage(session.confirmedStages, SHORTFILM_REFERENCE_STAGE) });
+      await uploadShortfilmReference(session.sessionId, body.sceneId, uploadedFile);
+      const reference = await getShortfilmReferences(session.sessionId);
+      const scene = reference.scenes?.find((item) => item.id === body.sceneId);
+      if (!scene?.selected) throw new Error('The uploaded frame was not selected.');
+      const imported = await importDesignCards(body.projectId, { settings: [scene] }, body.locale, 'reference');
+      await writeShortfilmSession({ ...session, videoStale: true, staleVideoIds: session.videoStale !== false && session.staleVideoIds === undefined ? undefined : [...new Set([...(session.staleVideoIds ?? []), body.sceneId])], finalStale: true,
+        confirmedStages: confirmationsBeforeStage(session.confirmedStages, SHORTFILM_REFERENCE_STAGE) });
+      return Response.json({ ...imported, state: await readState(body.projectId) });
+    }
+
     if (body.action === 'save_storyboard') {
       if (session.storyboardStale || ![SHORTFILM_SCRIPT_STAGE, SHORTFILM_DESIGN_STAGE].every(
         (stage) => session.confirmedStages?.includes(stage)
@@ -702,7 +789,7 @@ async function POST({ request }: { request: Request }) {
       await writeShortfilmSession({
         ...session,
         confirmedStages: confirmationsBeforeStage(session.confirmedStages, SHORTFILM_STORYBOARD_STAGE),
-        referenceStale: true, videoStale: true, finalStale: true,
+        referenceStale: true, videoStale: true, staleVideoIds: undefined, finalStale: true,
       });
       await updateShortfilmStoryboard(session.sessionId, updated);
       const imported = await importTextCard(body.projectId, {
@@ -725,7 +812,7 @@ async function POST({ request }: { request: Request }) {
         ...session,
         confirmedStages: confirmationsBeforeStage(session.confirmedStages, SHORTFILM_DESIGN_STAGE),
         storyboardStale: true,
-        referenceStale: true, videoStale: true, finalStale: true,
+        referenceStale: true, videoStale: true, staleVideoIds: undefined, finalStale: true,
       });
       if (body.operation === 'save') {
         await updateShortfilmDesignAsset(session.sessionId, body.group, asset);
@@ -756,7 +843,7 @@ async function POST({ request }: { request: Request }) {
       return Response.json({ ...imported, state: await readState(body.projectId) });
     }
 
-    const stage = body.stage ?? SHORTFILM_SCRIPT_STAGE;
+    const stage = body.action === 'video_clip' ? SHORTFILM_VIDEO_STAGE : body.stage ?? SHORTFILM_SCRIPT_STAGE;
     const confirmed = session.confirmedStages ?? [];
     const prerequisites = stage === SHORTFILM_FINAL_STAGE
       ? [SHORTFILM_SCRIPT_STAGE, SHORTFILM_DESIGN_STAGE, SHORTFILM_STORYBOARD_STAGE, SHORTFILM_REFERENCE_STAGE, SHORTFILM_VIDEO_STAGE]
@@ -849,19 +936,47 @@ async function POST({ request }: { request: Request }) {
 
     if (stage === SHORTFILM_VIDEO_STAGE) {
       const storyboard = await getShortfilmStoryboard(session.sessionId);
-      const segments = (storyboard.episodes ?? []).flatMap((episode) => episode.segments ?? []);
-      const ids = segments.map((segment) => segment.segment_id);
+      const allSegments = (storyboard.episodes ?? []).flatMap((episode) => episode.segments ?? []);
+      const single = body.action === 'video_clip';
+      const segments = single ? allSegments.filter((segment) => segment.segment_id === body.clipId) : allSegments;
       const previous = await getShortfilmVideos(session.sessionId);
-      await writeShortfilmSession({ ...session, videoStale: true, finalStale: true,
+      if (single && (!segments.length || !previous.clips?.some((clip) => clip.id === body.clipId))) {
+        return Response.json({ error: 'Video clip not found.' }, { status: 404 });
+      }
+      if (single && body.operation === 'save') {
+        if (!body.description) return Response.json({ error: 'A prompt is required.' }, { status: 400 });
+        await updateShortfilmVideos(session.sessionId, [{ id: body.clipId, description: body.description }]);
+        return Response.json({ state: await readState(body.projectId) });
+      }
+      if (single && body.operation === 'select') {
+        const clip = previous.clips!.find((item) => item.id === body.clipId)!;
+        const selected = clip.versions?.find((path) => shortfilmAssetUrl(path) === body.version);
+        if (!selected) return Response.json({ error: 'Unknown video version.' }, { status: 400 });
+        if (selected === clip.selected) return Response.json({ state: await readState(body.projectId) });
+        await writeShortfilmSession({ ...session, finalStale: true,
+          confirmedStages: confirmationsBeforeStage(confirmed, stage) });
+        const imported = await importDesignCards(body.projectId, { settings: [{ ...clip, selected }] }, body.locale, 'clip');
+        await updateShortfilmVideos(session.sessionId, [{ id: clip.id, selected }]);
+        return Response.json({ ...imported, state: await readState(body.projectId) });
+      }
+      const ids = segments.map((segment) => segment.segment_id);
+      const allIds = allSegments.map((segment) => segment.segment_id);
+      const staleIds = session.videoStale === false ? [] : (session.staleVideoIds ?? allIds).filter((id) => allIds.includes(id));
+      const pendingIds = [...new Set([...staleIds, ...ids])];
+      await writeShortfilmSession({ ...session, videoStale: true, staleVideoIds: pendingIds, finalStale: true,
         confirmedStages: confirmationsBeforeStage(confirmed, stage) });
       await updateShortfilmVideos(session.sessionId, segments.map((segment) => ({
-        id: segment.segment_id, description: videoSegmentDescription(segment),
+        id: segment.segment_id, description: single
+          ? body.description ?? previous.clips?.find((clip) => clip.id === segment.segment_id)?.description ?? videoSegmentDescription(segment)
+          : session.videoStale === false
+            ? previous.clips?.find((clip) => clip.id === segment.segment_id)?.description || videoSegmentDescription(segment)
+            : videoSegmentDescription(segment),
         duration: (segment.shots ?? []).reduce((sum, shot) => sum + (shot.duration ?? 2), 0),
       })));
       await regenerateShortfilmVideos(session.sessionId, ids);
       const status = await getShortfilmStatus(session.sessionId);
       const video = await getShortfilmVideos(session.sessionId);
-      if (!videoIsReady(status.status)) throw new Error(status.error || 'Video generation failed.');
+      if (!single && !videoIsReady(status.status)) throw new Error(status.error || 'Video generation failed.');
       const clips = ids.map((id) => {
         const clip = video.clips?.find((item) => item.id === id);
         const old = previous.clips?.find((item) => item.id === id);
@@ -873,7 +988,8 @@ async function POST({ request }: { request: Request }) {
       });
       await updateShortfilmVideos(session.sessionId, clips.map(({ id, selected }) => ({ id, selected })));
       const imported = await importDesignCards(body.projectId, { settings: clips }, body.locale, 'clip');
-      await writeShortfilmSession({ ...session, videoStale: false, finalStale: true,
+      const remainingIds = pendingIds.filter((id) => !ids.includes(id));
+      await writeShortfilmSession({ ...session, videoStale: remainingIds.length > 0, staleVideoIds: remainingIds, finalStale: true,
         confirmedStages: confirmationsBeforeStage(confirmed, stage) });
       return Response.json({ ...imported, state: await readState(body.projectId) });
     }
@@ -882,10 +998,10 @@ async function POST({ request }: { request: Request }) {
       const storyboard = await getShortfilmStoryboard(session.sessionId);
       const ids = (storyboard.episodes ?? []).flatMap((episode) => (episode.segments ?? []).map((segment) => segment.segment_id));
       const previous = await getShortfilmReferences(session.sessionId);
-      await writeShortfilmSession({ ...session, referenceStale: true, videoStale: true, finalStale: true,
+      await writeShortfilmSession({ ...session, referenceStale: true, videoStale: true, staleVideoIds: undefined, finalStale: true,
         confirmedStages: confirmationsBeforeStage(confirmed, stage) });
       // Old visual prompts must not survive edits to the storyboard or designs.
-      await updateShortfilmReferences(session.sessionId, ids.map((id) => ({ id, visual_prompt: '' })));
+      if (session.referenceStale !== false) await updateShortfilmReferences(session.sessionId, ids.map((id) => ({ id, visual_prompt: '' })));
       await regenerateShortfilmReferences(session.sessionId, ids);
       const status = await getShortfilmStatus(session.sessionId);
       const reference = await getShortfilmReferences(session.sessionId);
@@ -901,7 +1017,7 @@ async function POST({ request }: { request: Request }) {
       });
       await updateShortfilmReferences(session.sessionId, scenes.map(({ id, selected }) => ({ id, selected })));
       const imported = await importDesignCards(body.projectId, { settings: scenes }, body.locale, 'reference');
-      await writeShortfilmSession({ ...session, referenceStale: false, videoStale: true, finalStale: true,
+      await writeShortfilmSession({ ...session, referenceStale: false, videoStale: true, staleVideoIds: undefined, finalStale: true,
         confirmedStages: confirmationsBeforeStage(confirmed, stage) });
       return Response.json({ ...imported, state: await readState(body.projectId) });
     }
@@ -914,7 +1030,7 @@ async function POST({ request }: { request: Request }) {
         ...session,
         confirmedStages: confirmationsBeforeStage(confirmed, stage),
         storyboardStale: true,
-        referenceStale: true, videoStale: true, finalStale: true,
+        referenceStale: true, videoStale: true, staleVideoIds: undefined, finalStale: true,
       });
       // The ecommerce scenario agent ignores cached episodes only for an explicit rerun.
       await runShortfilmStage(session.sessionId, stage, 300_000, { regenerate: true });
@@ -933,7 +1049,7 @@ async function POST({ request }: { request: Request }) {
         ...session,
         confirmedStages: confirmationsBeforeStage(confirmed, stage),
         storyboardStale: false,
-        referenceStale: true, videoStale: true, finalStale: true,
+        referenceStale: true, videoStale: true, staleVideoIds: undefined, finalStale: true,
       });
       return Response.json({ sessionId: session.sessionId, stage, storyboard, ...imported, state: await readState(body.projectId) });
     }
@@ -943,7 +1059,7 @@ async function POST({ request }: { request: Request }) {
       ...session,
       confirmedStages: confirmationsBeforeStage(confirmed, stage),
       storyboardStale: true,
-        referenceStale: true, videoStale: true, finalStale: true,
+        referenceStale: true, videoStale: true, staleVideoIds: undefined, finalStale: true,
     });
 
     if (stage === SHORTFILM_DESIGN_STAGE) {
@@ -969,7 +1085,7 @@ async function POST({ request }: { request: Request }) {
         ...session,
         confirmedStages: confirmationsBeforeStage(confirmed, stage),
         storyboardStale: true,
-        referenceStale: true, videoStale: true, finalStale: true,
+        referenceStale: true, videoStale: true, staleVideoIds: undefined, finalStale: true,
       });
       const state = await readState(body.projectId);
       return Response.json({
@@ -1006,7 +1122,7 @@ async function POST({ request }: { request: Request }) {
       ...session,
       confirmedStages: confirmationsBeforeStage(confirmed, stage),
       storyboardStale: true,
-        referenceStale: true, videoStale: true, finalStale: true,
+        referenceStale: true, videoStale: true, staleVideoIds: undefined, finalStale: true,
     });
     const state = await readState(body.projectId);
     return Response.json({

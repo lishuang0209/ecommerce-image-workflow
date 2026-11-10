@@ -62,6 +62,7 @@ type VideoState = {
   referenceStale?: boolean;
   video?: ShortfilmVideoArtifact | null;
   videoStale?: boolean;
+  staleVideoIds?: string[];
   final?: ShortfilmFinalArtifact | null;
   finalStale?: boolean;
   storyboardRevision?: string | null;
@@ -112,6 +113,8 @@ export function EcommerceVideoPanel({
 
   const [state, setState] = useState<VideoState | null>(null);
   const [idea, setIdea] = useState('');
+  const [frameEdit, setFrameEdit] = useState<{ id: string; prompt: string } | null>(null);
+  const [clipEdit, setClipEdit] = useState<{ id: string; description: string } | null>(null);
   const [selectedStage, setSelectedStage] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -397,6 +400,78 @@ export function EcommerceVideoPanel({
       }
       await refresh();
       setNotice(t('videoClipsReady'));
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : t('videoError'));
+      await refresh().catch(() => undefined);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const frameAction = async (sceneId: string, operation: 'save' | 'regenerate' | 'select', version?: string) => {
+    if (busy || workflowRunning) return;
+    if (operation === 'regenerate' && !window.confirm(t('videoFrameRegenerateConfirm'))) return;
+    setBusy(true);
+    setError('');
+    setNotice('');
+    try {
+      await flush();
+      const result = await apiJsonPost<RunResult>('/api/demo/ecommerce-video', {
+        projectId, action: 'frame_asset', sceneId, operation, version,
+        prompt: frameEdit?.id === sceneId ? frameEdit.prompt : undefined, locale,
+      });
+      if (result.document && typeof result.version === 'number') onSavedSnapshot(result.document, result.version);
+      setFrameEdit(null);
+      await refresh();
+      setNotice(t(operation === 'save' ? 'videoFramePromptSaved' : 'videoUploadFrameDone'));
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : t('videoError'));
+      await refresh().catch(() => undefined);
+    } finally { setBusy(false); }
+  };
+
+  const uploadFrame = async (sceneId: string, file: File) => {
+    if (busy || workflowRunning) return;
+    if (file.size > 25 * 1024 * 1024) { setError(t('videoUploadFrameLimit')); return; }
+    setBusy(true);
+    setError('');
+    setNotice('');
+    try {
+      await flush();
+      const form = new FormData();
+      form.set('projectId', projectId);
+      form.set('sceneId', sceneId);
+      form.set('locale', locale);
+      form.set('file', file);
+      const response = await fetch('/api/demo/ecommerce-video', {
+        method: 'POST', headers: { 'x-beatapi-workspace-request': '1' }, body: form,
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || t('videoError'));
+      if (result.document && typeof result.version === 'number') onSavedSnapshot(result.document, result.version);
+      await refresh();
+      setNotice(t('videoUploadFrameDone'));
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : t('videoError'));
+      await refresh().catch(() => undefined);
+    } finally { setBusy(false); }
+  };
+
+  const regenerateClip = async (clipId: string, description?: string, operation: 'regenerate' | 'save' | 'select' = 'regenerate', version?: string) => {
+    if (busy || workflowRunning || !referenceReady || !referenceConfirmed) return;
+    if (operation === 'regenerate' && !window.confirm(t('videoClipRegenerateConfirm'))) return;
+    setBusy(true);
+    setError('');
+    setNotice('');
+    try {
+      await flush();
+      const result = await apiJsonPost<RunResult>('/api/demo/ecommerce-video', {
+        projectId, action: 'video_clip', clipId, description, operation, version, locale,
+      });
+      if (result.document && typeof result.version === 'number') onSavedSnapshot(result.document, result.version);
+      setClipEdit(null);
+      await refresh();
+      setNotice(t(operation === 'save' ? 'videoFramePromptSaved' : operation === 'select' ? 'videoClipVersionSelected' : 'videoClipsReady'));
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : t('videoError'));
       await refresh().catch(() => undefined);
@@ -910,19 +985,43 @@ export function EcommerceVideoPanel({
                   <span className={statusTone(referenceStatus ?? 'pending')}>{state?.referenceStale && !referenceRunning && state.reference?.scenes?.some((scene) => scene.selected) ? t('videoStoryboardNeedsRegeneration') : t(stageStatusKey(referenceStatus))}</span>
                 </div>
                 {state?.referenceStale && state.reference?.scenes?.some((scene) => scene.selected) ? <p className="text-xs text-white/55">{t('videoReferenceStale')}</p> : null}
-                <div className="grid grid-cols-2 gap-3">
-                  {(state?.reference?.scenes ?? []).map((scene, index) => <figure key={scene.id} className="min-w-0">
+                <div className="space-y-5">
+                  {(state?.reference?.scenes ?? []).map((scene, index) => <figure key={scene.id} className="min-w-0 space-y-2 border-b border-white/10 pb-4">
                     {scene.selected ? <img src={scene.selected} alt={scene.name} className="aspect-video w-full rounded object-contain bg-white/5" />
                       : <div className="flex aspect-video items-center justify-center rounded bg-white/5 text-xs text-white/40">{t('videoStatusPending')}</div>}
                     <figcaption className="mt-1 text-xs text-white/60">{t('videoStoryboardSegmentLabel', { number: index + 1 })}</figcaption>
+                    {frameEdit?.id === scene.id ? <div className="space-y-2">
+                      <label className="block text-xs text-white/60">{t('videoFramePrompt')}
+                        <textarea className="mt-2 min-h-32 w-full rounded border border-white/20 bg-transparent p-3 text-xs text-white" maxLength={12000} value={frameEdit.prompt} disabled={busy} onChange={(event) => setFrameEdit({ id: scene.id, prompt: event.target.value })} />
+                      </label>
+                      <div className="flex gap-2">
+                        <button type="button" className={`${VIDEO_BUTTON_CLASS} min-h-8 rounded px-3 text-xs`} disabled={busy || !frameEdit.prompt.trim()} onClick={() => void frameAction(scene.id, 'save')}>{t('videoFrameSave')}</button>
+                        <button type="button" className={`${VIDEO_BUTTON_CLASS} min-h-8 rounded px-3 text-xs`} disabled={busy} onClick={() => setFrameEdit(null)}>{t('videoClipCancel')}</button>
+                      </div>
+                      <p className="text-xs text-white/45">{t('videoFramePromptHint')}</p>
+                    </div> : <p className="whitespace-pre-wrap text-xs leading-5 text-white/60">{scene.visual_prompt || scene.description}</p>}
+                    <div className="flex items-center gap-2">
+                      <button type="button" className={`${VIDEO_BUTTON_CLASS} min-h-8 shrink-0 whitespace-nowrap rounded px-3 text-xs`} disabled={busy || offline || workflowRunning || !storyboardConfirmed || storyboardStale || Boolean(frameEdit) || Boolean(storyboardEdit) || Boolean(clipEdit) || Boolean(frameEdit)} onClick={() => setFrameEdit({ id: scene.id, prompt: scene.visual_prompt || scene.description || '' })}>{t('videoFrameEdit')}</button>
+                      <button type="button" className={`${VIDEO_BUTTON_CLASS} min-h-8 shrink-0 whitespace-nowrap rounded px-3 text-xs`} disabled={busy || offline || workflowRunning || !storyboardConfirmed || storyboardStale || Boolean(storyboardEdit) || Boolean(clipEdit) || Boolean(frameEdit && (frameEdit.id !== scene.id || !frameEdit.prompt.trim()))} onClick={() => void frameAction(scene.id, 'regenerate')}>{t('videoClipRegenerate')}</button>
+                    <label className={`${VIDEO_BUTTON_CLASS} relative inline-flex min-h-8 shrink-0 whitespace-nowrap items-center rounded px-3 text-xs ${busy || offline || workflowRunning || !storyboardConfirmed || storyboardStale || storyboardEdit || clipEdit || frameEdit ? 'pointer-events-none opacity-40' : 'cursor-pointer hover:bg-orange-400/[0.06]'}`}>
+                      {t('videoUploadFrame')}
+                      <input type="file" accept=".jpg,.jpeg,.png,.webp,.bmp" aria-label={t('videoUploadFrame')} className="absolute inset-0 w-full cursor-pointer opacity-0" disabled={busy || offline || workflowRunning || !storyboardConfirmed || storyboardStale || Boolean(storyboardEdit) || Boolean(clipEdit) || Boolean(frameEdit)} onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ''; if (file) void uploadFrame(scene.id, file); }} />
+                    </label>
+                    </div>
+                    <div className="flex gap-2 overflow-x-auto pb-2" aria-label={t('videoFrameVersions')}>
+                      {(scene.versions ?? []).map((version, versionIndex) => <button type="button" key={version} aria-pressed={scene.selectedVersion === version} disabled={busy || offline || workflowRunning || !storyboardConfirmed || storyboardStale || Boolean(frameEdit) || Boolean(storyboardEdit) || Boolean(clipEdit) || Boolean(frameEdit)} onClick={() => void frameAction(scene.id, 'select', version)} className={`w-24 shrink-0 overflow-hidden rounded border p-1 text-xs transition-colors hover:border-orange-400 ${scene.selectedVersion === version ? 'border-orange-400 bg-orange-400/10' : 'border-white/15'} disabled:opacity-40`}>
+                        <img src={version} alt={t('videoFrameVersion', { number: versionIndex + 1 })} className="aspect-[3/4] w-full object-contain" />
+                        <span>{t(version.includes('_upload_') ? 'videoFrameUploadedVersion' : 'videoFrameVersion', { number: versionIndex + 1 })}</span>
+                      </button>)}
+                    </div>
                   </figure>)}
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  <button type="button" disabled={busy || offline || workflowRunning || !storyboardConfirmed || storyboardStale || Boolean(storyboardEdit)}
+                  <button type="button" disabled={busy || offline || workflowRunning || !storyboardConfirmed || storyboardStale || Boolean(storyboardEdit) || Boolean(clipEdit) || Boolean(frameEdit)}
                     className={`${VIDEO_BUTTON_CLASS} min-h-10 flex-1 rounded px-3 text-xs`} onClick={() => void runReferences()}>
                     {referenceRunning ? t('videoStatusRunning') : state?.reference?.scenes?.some((scene) => scene.selected) ? t('videoRerunReference') : t('videoGenerateReference')}
                   </button>
-                  {referenceReady && !referenceConfirmed ? <button type="button" disabled={busy || offline || workflowRunning || !storyboardConfirmed || Boolean(storyboardEdit)}
+                  {referenceReady && !referenceConfirmed ? <button type="button" disabled={busy || offline || workflowRunning || !storyboardConfirmed || Boolean(storyboardEdit) || Boolean(clipEdit) || Boolean(frameEdit)}
                     className={`${VIDEO_BUTTON_CLASS} min-h-10 flex-1 rounded px-3 text-xs`} onClick={() => void continueWorkflow(SHORTFILM_REFERENCE_STAGE)}>{t('videoConfirmReference')}</button> : null}
                 </div>
                 {referenceConfirmed ? <p className="text-xs text-white/55">{t('videoReferenceConfirmed')}</p> : null}
@@ -934,22 +1033,43 @@ export function EcommerceVideoPanel({
             {referenceConfirmed || state?.video?.clips?.length ? (
               <section className="space-y-3 border-t border-white/10 py-4">
                 <div className="flex items-center justify-between text-xs"><h3 className="font-medium">{t('videoStageVideo')}</h3>
-                  <span className={statusTone(videoStatus ?? 'pending')}>{state?.videoStale && !videoRunning && state.video?.clips?.some((scene) => scene.selected) ? t('videoStoryboardNeedsRegeneration') : t(stageStatusKey(videoStatus))}</span>
+                  <span className={state?.videoStale ? 'text-amber-300' : statusTone(videoStatus ?? 'pending')}>{state?.videoStale && !videoRunning && state.video?.clips?.some((scene) => scene.selected) ? t('videoStoryboardNeedsRegeneration') : t(stageStatusKey(videoStatus))}</span>
                 </div>
                 {state?.videoStale && state.video?.clips?.some((scene) => scene.selected) ? <p className="text-xs text-white/55">{t('videoClipsStale')}</p> : null}
-                <div className="grid grid-cols-2 gap-3">
-                  {(state?.video?.clips ?? []).map((scene, index) => <figure key={scene.id} className="min-w-0">
+                <div className="space-y-5">
+                  {(state?.video?.clips ?? []).map((scene, index) => <figure key={scene.id} className="min-w-0 space-y-2 border-b border-white/10 pb-4">
                     {scene.selected ? <video src={scene.selected} aria-label={scene.name} controls playsInline preload="metadata" className="aspect-video w-full rounded bg-black object-contain" />
                       : <div className="flex aspect-video items-center justify-center rounded bg-white/5 text-xs text-white/40">{t('videoStatusPending')}</div>}
-                    <figcaption className="mt-1 text-xs text-white/60">{t('videoStoryboardSegmentLabel', { number: index + 1 })}</figcaption>
+                    <figcaption className="mt-1 text-xs text-white/60">{t('videoStoryboardSegmentLabel', { number: index + 1 })}{state?.staleVideoIds?.includes(scene.id) ? <span className="ml-2 text-amber-300">{t('videoStoryboardNeedsRegeneration')}</span> : null}</figcaption>
+                    {clipEdit?.id === scene.id ? <div className="space-y-2">
+                      <label className="block text-xs text-white/60">{t('videoClipDescription')}
+                        <textarea className="mt-2 min-h-32 w-full rounded border border-white/20 bg-transparent p-3 text-xs text-white" maxLength={12000} value={clipEdit.description} disabled={busy} onChange={(event) => setClipEdit({ ...clipEdit, description: event.target.value })} />
+                      </label>
+                      <p className="text-xs text-white/45">{t('videoClipPromptHint')}</p>
+                      <div className="flex flex-wrap gap-2">
+                        <button type="button" className={`${VIDEO_BUTTON_CLASS} min-h-8 rounded px-3 text-xs`} disabled={busy || offline || workflowRunning || !referenceReady || !referenceConfirmed || !clipEdit.description.trim()} onClick={() => void regenerateClip(scene.id, clipEdit.description, 'save')}>{t('videoFrameSave')}</button>
+                        <button type="button" className={`${VIDEO_BUTTON_CLASS} min-h-8 rounded px-3 text-xs`} disabled={busy} onClick={() => setClipEdit(null)}>{t('videoClipCancel')}</button>
+                      </div>
+                    </div> : <p className="whitespace-pre-wrap text-xs leading-5 text-white/60">{scene.description}</p>}
+                    <div className="flex items-center gap-2">
+                      <button type="button" className={`${VIDEO_BUTTON_CLASS} min-h-8 shrink-0 whitespace-nowrap rounded px-3 text-xs`} disabled={busy || offline || workflowRunning || !referenceReady || !referenceConfirmed || Boolean(storyboardEdit) || Boolean(clipEdit) || Boolean(frameEdit)} onClick={() => setClipEdit({ id: scene.id, description: scene.description ?? '' })}>{t('videoFrameEdit')}</button>
+                      <button type="button" className={`${VIDEO_BUTTON_CLASS} min-h-8 shrink-0 whitespace-nowrap rounded px-3 text-xs`} disabled={busy || offline || workflowRunning || !referenceReady || !referenceConfirmed || Boolean(storyboardEdit) || Boolean(clipEdit && (clipEdit.id !== scene.id || !clipEdit.description.trim())) || Boolean(frameEdit)} onClick={() => void regenerateClip(scene.id, clipEdit?.id === scene.id ? clipEdit.description : undefined)}>{t('videoClipRegenerate')}</button>
+                    </div>
+
+                    <div className="flex gap-2 overflow-x-auto pb-2" aria-label={t('videoFrameVersions')}>
+                      {(scene.versions ?? []).map((version, versionIndex) => <button type="button" key={version} aria-pressed={scene.selectedVersion === version} disabled={busy || offline || workflowRunning || !referenceReady || !referenceConfirmed || Boolean(clipEdit) || Boolean(frameEdit) || Boolean(storyboardEdit)} onClick={() => void regenerateClip(scene.id, undefined, 'select', version)} className={`w-24 shrink-0 overflow-hidden rounded border p-1 text-xs transition-colors hover:border-orange-400 ${scene.selectedVersion === version ? 'border-orange-400 bg-orange-400/10' : 'border-white/15'} disabled:opacity-40`}>
+                        <video src={version} muted playsInline preload="metadata" className="pointer-events-none aspect-[3/4] w-full object-contain" />
+                        <span>{t('videoFrameVersion', { number: versionIndex + 1 })}</span>
+                      </button>)}
+                    </div>
                   </figure>)}
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  <button type="button" disabled={busy || offline || workflowRunning || !referenceConfirmed || !referenceReady || Boolean(storyboardEdit)}
+                  <button type="button" disabled={busy || offline || workflowRunning || !referenceConfirmed || !referenceReady || Boolean(storyboardEdit) || Boolean(clipEdit) || Boolean(frameEdit)}
                     className={`${VIDEO_BUTTON_CLASS} min-h-10 flex-1 rounded px-3 text-xs`} onClick={() => void runVideos()}>
                     {videoRunning ? t('videoStatusRunning') : state?.video?.clips?.some((scene) => scene.selected) ? t('videoRerunVideo') : t('videoGenerateClips')}
                   </button>
-                  {clipsReady && !clipsConfirmed ? <button type="button" disabled={busy || offline || workflowRunning || !referenceConfirmed || Boolean(storyboardEdit)}
+                  {clipsReady && !clipsConfirmed ? <button type="button" disabled={busy || offline || workflowRunning || !referenceConfirmed || Boolean(storyboardEdit) || Boolean(clipEdit) || Boolean(frameEdit)}
                     className={`${VIDEO_BUTTON_CLASS} min-h-10 flex-1 rounded px-3 text-xs`} onClick={() => void continueWorkflow(SHORTFILM_VIDEO_STAGE)}>{t('videoConfirmClips')}</button> : null}
                 </div>
                 {clipsConfirmed ? <p className="text-xs text-white/55">{t('videoClipsConfirmed')}</p> : null}
@@ -969,11 +1089,11 @@ export function EcommerceVideoPanel({
                     <a href={video.path} download className={`${VIDEO_BUTTON_CLASS} rounded px-3 py-2`}>{t('videoDownloadFinal')}</a></figcaption>
                 </figure> : null)}
                 <div className="flex gap-2">
-                  <button type="button" disabled={busy || offline || workflowRunning || !clipsConfirmed || !clipsReady || Boolean(storyboardEdit)}
+                  <button type="button" disabled={busy || offline || workflowRunning || !clipsConfirmed || !clipsReady || Boolean(storyboardEdit) || Boolean(clipEdit) || Boolean(frameEdit)}
                     className={`${VIDEO_BUTTON_CLASS} min-h-10 flex-1 rounded px-3 text-xs`} onClick={() => void runFinal()}>
                     {finalRunning ? t('videoStatusRunning') : state?.final?.final_videos?.some((video) => video.path) ? t('videoReassemble') : t('videoAssemble')}
                   </button>
-                  {finalReady && !finalConfirmed ? <button type="button" disabled={busy || offline || workflowRunning || !clipsConfirmed || Boolean(storyboardEdit)}
+                  {finalReady && !finalConfirmed ? <button type="button" disabled={busy || offline || workflowRunning || !clipsConfirmed || Boolean(storyboardEdit) || Boolean(clipEdit) || Boolean(frameEdit)}
                     className={`${VIDEO_BUTTON_CLASS} min-h-10 flex-1 rounded px-3 text-xs`} onClick={() => void continueWorkflow(SHORTFILM_FINAL_STAGE)}>{t('videoConfirmFinal')}</button> : null}
                 </div>
                 {finalConfirmed ? <p className="text-xs text-green-300">{t('videoFinalConfirmed')}</p> : null}

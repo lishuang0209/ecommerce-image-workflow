@@ -15,6 +15,8 @@ export type ShortfilmSessionRecord = {
   storyboardStale?: boolean;
   referenceStale?: boolean;
   videoStale?: boolean;
+  /** Undefined with videoStale means all clips (including legacy sessions). */
+  staleVideoIds?: string[];
   finalStale?: boolean;
 };
 

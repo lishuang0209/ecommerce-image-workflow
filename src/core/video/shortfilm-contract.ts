@@ -49,6 +49,8 @@ export type ShortfilmDesignAsset = {
   id: string;
   name: string;
   description?: string;
+  visual_prompt?: string;
+  selectedVersion?: string;
   selected?: string;
   versions?: string[];
   status?: string;

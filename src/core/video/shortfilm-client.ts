@@ -311,3 +311,13 @@ export async function getShortfilmFinal(sessionId: string): Promise<ShortfilmFin
     throw error;
   }
 }
+
+export async function uploadShortfilmReference(sessionId: string, sceneId: string, file: File): Promise<void> {
+  const form = new FormData();
+  form.set('item_type', 'scenes');
+  form.set('item_id', sceneId);
+  form.set('file', file);
+  await readJson(await fetch(`${getShortfilmBaseUrl()}/api/project/${encodeURIComponent(sessionId)}/artifact/reference_generation/upload_image`, {
+    method: 'POST', body: form, signal: AbortSignal.timeout(60_000),
+  }));
+}

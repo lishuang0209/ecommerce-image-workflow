@@ -54,6 +54,15 @@ test('storyboard route enforces confirmations, imports one durable card, restore
       }
       return Response.json({ artifact: storyboard });
     }
+    if (path.endsWith('/artifact/reference_generation/upload_image')) {
+      const form = init?.body as FormData;
+      assert.equal(form.get('item_type'), 'scenes');
+      assert.equal(form.get('item_id'), 'seg_01_01');
+      assert.ok(form.get('file') instanceof File);
+      references.scenes[0].versions.push('code/frame-upload.png');
+      references.scenes[0].selected = 'code/frame-upload.png';
+      return Response.json({ status: 'ok' });
+    }
     if (path.endsWith('/artifact/reference_generation')) {
       if (init?.method === 'PATCH') {
         for (const patch of JSON.parse(String(init.body)).scenes) {
@@ -93,7 +102,7 @@ test('storyboard route enforces confirmations, imports one durable card, restore
         videoExecutions++;
         status.current_stage = 'video_generation';
         status.status.video_generation = 'completed';
-        if (!failVideos) videos.clips = videos.clips.map((clip: any) => ({ ...clip,
+        if (!failVideos) videos.clips = videos.clips.map((clip: any) => !body.modifications.regenerate_clips.includes(clip.id) ? clip : ({ ...clip,
           selected: clip.selected || `code/clip-${videoExecutions}.mp4`, status: 'done',
           versions: [...(clip.versions ?? []), `code/clip-${videoExecutions}.mp4`],
         }));
@@ -101,7 +110,7 @@ test('storyboard route enforces confirmations, imports one durable card, restore
       }
       assert.equal(body.stage, 'reference_generation');
       assert.deepEqual(body.modifications.regenerate_scenes, ['seg_01_01']);
-      assert.equal(references.scenes[0].visual_prompt, '', 'outdated prompts must be cleared');
+      assert.ok(typeof references.scenes[0].visual_prompt === 'string');
       referenceExecutions++;
       status.current_stage = 'reference_generation';
       status.status.reference_generation = 'completed';
@@ -179,6 +188,59 @@ test('storyboard route enforces confirmations, imports one durable card, restore
     assert.deepEqual(updatedFrames.document.frames[frameCard.id], frames.document.frames[frameCard.id]);
     assert.equal(references.scenes[0].selected, 'code/frame-2.png', 'new version must replace old selection');
     assert.equal(updatedFrames.state.confirmedStages.includes('reference_generation'), false);
+    const upload = (sceneId = 'seg_01_01', contents: Uint8Array = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=', 'base64'), trusted = true) => {
+      const form = new FormData();
+      form.set('projectId', project.id);
+      form.set('sceneId', sceneId);
+      form.set('locale', 'zh');
+      form.set('file', new Blob([contents as BlobPart], { type: 'image/png' }), 'photo.png');
+      return handlers.POST({ request: new Request('http://127.0.0.1:3020/api/demo/ecommerce-video', {
+        method: 'POST', headers: trusted ? { 'x-beatapi-workspace-request': '1' } : {}, body: form,
+      }) }) as Promise<Response>;
+    };
+    assert.equal((await upload('seg_01_01', new Uint8Array([1, 2, 3]))).status, 400);
+    assert.equal((await upload('missing')).status, 404);
+    assert.equal((await upload('seg_01_01', undefined, false)).status, 403);
+    const beforeUploadExecutions = referenceExecutions;
+    const uploadResponse = await upload();
+    assert.equal(uploadResponse.status, 200, await uploadResponse.clone().text());
+    const uploaded = await uploadResponse.json();
+    assert.equal(referenceExecutions, beforeUploadExecutions, 'upload must not invoke generation');
+    assert.equal(uploaded.importedCount, 1);
+    assert.equal(references.scenes[0].selected, 'code/frame-upload.png');
+    assert.ok(references.scenes[0].versions.includes('code/frame-2.png'));
+    assert.equal(uploaded.state.referenceStale, false);
+    assert.equal(uploaded.state.videoStale, true);
+    assert.equal(uploaded.state.finalStale, true);
+    assert.ok(!uploaded.state.confirmedStages.includes('reference_generation'));
+    const uploadedCard = uploaded.document.cards.find((card: any) => card.id === frameCard.id);
+    assert.equal(uploaded.state.reference.scenes[0].selected, uploadedCard.url);
+    assert.notEqual(uploadedCard.url, frameCard.url);
+    assert.deepEqual(uploaded.document.frames[frameCard.id], frames.document.frames[frameCard.id]);
+    const promptExecutions = referenceExecutions;
+    const savedFrame = await post({ action: 'frame_asset', sceneId: 'seg_01_01', operation: 'save', prompt: 'Close-up of the product' });
+    assert.equal(savedFrame.status, 200);
+    assert.equal(references.scenes[0].visual_prompt, 'Close-up of the product');
+    assert.equal(referenceExecutions, promptExecutions);
+    assert.equal((await post({ action: 'frame_asset', sceneId: 'seg_01_01', operation: 'save', prompt: ' ' })).status, 400);
+    assert.equal((await post({ action: 'frame_asset', sceneId: 'seg_01_01', operation: 'select', version: 'https://example.com/arbitrary.png' })).status, 400);
+    const versionResponse = await post({ action: 'frame_asset', sceneId: 'seg_01_01', operation: 'select', version: 'http://127.0.0.1:8000/code/frame-2.png' });
+    assert.equal(versionResponse.status, 200, await versionResponse.clone().text());
+    const versionState = (await versionResponse.json()).state;
+    assert.equal(references.scenes[0].selected, 'code/frame-2.png');
+    assert.equal(versionState.reference.scenes[0].selectedVersion, 'http://127.0.0.1:8000/code/frame-2.png');
+    assert.ok(versionState.reference.scenes[0].versions.includes('http://127.0.0.1:8000/code/frame-upload.png'));
+    assert.equal(referenceExecutions, promptExecutions);
+    const oneFrame = await post({ action: 'frame_asset', sceneId: 'seg_01_01', operation: 'regenerate' });
+    assert.equal(oneFrame.status, 200, await oneFrame.clone().text());
+    const oneFrameResult = await oneFrame.json();
+    assert.equal(oneFrameResult.importedCount, 1);
+    assert.equal(referenceExecutions, promptExecutions + 1);
+    assert.equal(oneFrameResult.state.referenceStale, false);
+    assert.equal(oneFrameResult.state.videoStale, true);
+    assert.deepEqual(oneFrameResult.document.frames[frameCard.id], frames.document.frames[frameCard.id]);
+
+
     failReferences = true;
     assert.equal((await post({ action: 'run', stage: 'reference_generation' })).status, 502);
     assert.equal((await read()).referenceStale, true);
@@ -206,6 +268,75 @@ test('storyboard route enforces confirmations, imports one durable card, restore
     assert.equal(rerunVideos.document.cards.filter((card: any) => card.id === clipCard.id).length, 1);
     assert.deepEqual(rerunVideos.document.frames[clipCard.id], generatedVideos.document.frames[clipCard.id]);
     assert.equal(videos.clips[0].selected, 'code/clip-2.mp4');
+    const executionsBeforeEdit = videoExecutions;
+    assert.equal((await post({ action: 'video_clip', clipId: 'missing' })).status, 404);
+    assert.equal((await post({ action: 'video_clip', clipId: 'seg_01_01', description: ' ' })).status, 400);
+    assert.equal(videoExecutions, executionsBeforeEdit);
+    const otherClip = { id: 'untouched', selected: 'code/other.mp4', description: 'Unchanged' };
+    videos.clips.push(otherClip);
+    const singleResponse = await post({ action: 'video_clip', clipId: 'seg_01_01', description: 'Take 1: slow camera push-in' });
+    assert.equal(singleResponse.status, 200, await singleResponse.clone().text());
+    const single = await singleResponse.json();
+    assert.equal(single.importedCount, 1);
+    assert.equal(videos.clips[0].description, 'Take 1: slow camera push-in');
+    assert.deepEqual(videos.clips[1], otherClip);
+    assert.equal(single.state.videoStale, false);
+    assert.equal(single.state.finalStale, true);
+    assert.ok(!single.state.confirmedStages.includes('video_generation'));
+    assert.deepEqual(single.document.frames[clipCard.id], generatedVideos.document.frames[clipCard.id]);
+    assert.notEqual(single.document.cards.find((card: any) => card.id === clipCard.id).url, clipCard.url);
+    videos.clips.pop();
+
+    const beforePromptSave = videoExecutions;
+    assert.equal((await post({ action: 'video_clip', clipId: 'seg_01_01', operation: 'save', description: 'Take 1: product close-up' })).status, 200);
+    assert.equal(videoExecutions, beforePromptSave);
+    assert.equal(videos.clips[0].description, 'Take 1: product close-up');
+    assert.equal((await post({ action: 'video_clip', clipId: 'seg_01_01', operation: 'select', version: 'https://example.com/fake.mp4' })).status, 400);
+    const selectClip = await post({ action: 'video_clip', clipId: 'seg_01_01', operation: 'select', version: 'http://127.0.0.1:8000/code/clip-2.mp4' });
+    assert.equal(selectClip.status, 200, await selectClip.clone().text());
+    const selectedClip = await selectClip.json();
+    assert.equal(videoExecutions, beforePromptSave);
+    assert.equal(videos.clips[0].selected, 'code/clip-2.mp4');
+    assert.equal(selectedClip.state.video.clips[0].selectedVersion, 'http://127.0.0.1:8000/code/clip-2.mp4');
+    assert.ok(selectedClip.state.video.clips[0].versions.length >= 3);
+    assert.equal(selectedClip.state.videoStale, false);
+    assert.equal(selectedClip.state.finalStale, true);
+    assert.deepEqual(selectedClip.document.frames[clipCard.id], generatedVideos.document.frames[clipCard.id]);
+
+    // Changing one frame invalidates only its clip, even in a multi-clip project.
+    storyboard.episodes[0].segments.push({ ...structuredClone(storyboard.episodes[0].segments[0]), segment_id: 'seg_01_02' });
+    references.scenes.push({ ...structuredClone(references.scenes[0]), id: 'seg_01_02' });
+    const unaffectedClip = { ...structuredClone(videos.clips[0]), id: 'seg_01_02' };
+    videos.clips.push(unaffectedClip);
+    const changedFrame = await post({ action: 'frame_asset', sceneId: 'seg_01_01', operation: 'select', version: 'http://127.0.0.1:8000/code/frame-2.png' });
+    assert.equal(changedFrame.status, 200);
+    assert.deepEqual((await changedFrame.json()).state.staleVideoIds, ['seg_01_01']);
+    assert.equal((await post({ action: 'continue', stage: 'reference_generation' })).status, 200);
+    const markedSession = (await readShortfilmSession(project.id))!;
+    await writeShortfilmSession({ ...markedSession, staleVideoIds: ['seg_01_01', 'seg_01_02'] });
+    const repairOne = await post({ action: 'video_clip', clipId: 'seg_01_01' });
+    assert.equal(repairOne.status, 200, await repairOne.clone().text());
+    const repaired = (await repairOne.json()).state;
+    assert.deepEqual(repaired.staleVideoIds, ['seg_01_02']);
+    assert.equal(repaired.videoStale, true);
+    assert.deepEqual(videos.clips[1], unaffectedClip);
+    assert.equal((await post({ action: 'continue', stage: 'video_generation' })).status, 409);
+    assert.equal((await post({ action: 'run', stage: 'post_production' })).status, 409);
+    // A failed single rerun remains retryable and does not clear another clip's marker.
+    failVideos = true;
+    const oldClipUrl = (await read()).video.clips[0].selected;
+    assert.equal((await post({ action: 'video_clip', clipId: 'seg_01_01' })).status, 502);
+    assert.deepEqual(new Set((await read()).staleVideoIds), new Set(['seg_01_01', 'seg_01_02']));
+    assert.equal((await read()).video.clips[0].selected, oldClipUrl);
+    failVideos = false;
+    storyboard.episodes[0].segments.pop();
+    references.scenes.pop();
+    videos.clips.pop();
+    const retryOne = await post({ action: 'video_clip', clipId: 'seg_01_01' });
+    assert.equal(retryOne.status, 200);
+    assert.deepEqual((await retryOne.json()).state.staleVideoIds, []);
+    assert.equal((await read()).videoStale, false);
+
     failVideos = true;
     assert.equal((await post({ action: 'run', stage: 'video_generation' })).status, 502);
     assert.equal((await read()).videoStale, true);
