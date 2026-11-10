@@ -1,3 +1,4 @@
+import { paidJobErrorKey } from '@/lib/ecommerce-paid-job-error';
 import { useEffect, useMemo, useState } from 'react';
 import type { CanvasCard } from '@/core/beatcanvas/canvas-types';
 import { apiJsonDelete, apiJsonGet, apiJsonPost } from '@/lib/api-client';
@@ -44,7 +45,7 @@ export function EcommerceResizePanel({ projectId, cards }: { projectId: string; 
       const created = result.derived.filter(item => item.created).length;
       setNotice(mode === 'expand' ? t('resizeExpandDone', { created, reused: result.derived.length - created, skipped: result.skipped?.length || 0 }) : t('resizeDone', { created, total: result.derived.length }));
       await reload();
-    } catch (cause) { setError(cause instanceof Error ? cause.message : t('failed')); } finally { setBusy(false); }
+    } catch (cause) { const key = paidJobErrorKey(cause); setError(key ? t(key) : cause instanceof Error ? cause.message : t('failed')); } finally { setBusy(false); }
   }
   // A source that is no longer the adopted main or the latest scene result is an older version.
   const isCurrent = (assetId: string) => sources.some(row => row.assetId === assetId);

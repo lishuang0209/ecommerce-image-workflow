@@ -1,9 +1,10 @@
+import { findDerivedImage, runEcommercePaidJob } from './ecommerce-paid-job';
 import sharp from 'sharp';
 import { readFile } from 'node:fs/promises';
 import { LOCAL_PROJECT_ASSET_BUCKET, persistLocalProjectAsset, resolveLocalProjectAssetPath } from '@/core/projects/local-project-assets';
 import { getProjectAssetById, linkProjectAsset, recordUserAsset } from '@/core/workspace-lib/assets/user-assets';
 import { outpaintBailianImage } from './bailian-outpaint';
-import { listDerivedSizes, type DerivedSize } from './ecommerce-resize';
+import { toDerived, type DerivedSize } from './ecommerce-resize';
 import { expandScales, isExpandRatio, MAX_EXPAND_IMAGES } from './image-expand';
 import type { ResizeRatio } from './image-resize';
 
@@ -22,7 +23,6 @@ export async function expandEcommerceImages({ projectId, assetIds, ratios, outpa
   const sources = [...new Set(assetIds)];
   if (wanted.some(ratio => !isExpandRatio(ratio))) throw new Error('This ratio cannot be expanded. Use crop or pad.');
   if (!sources.length || sources.length * wanted.length > MAX_EXPAND_IMAGES) throw new Error(`Expand at most ${MAX_EXPAND_IMAGES} images at a time.`);
-  const existing: DerivedSize[] = await listDerivedSizes(projectId);
   const derived: (DerivedSize & { created: boolean })[] = [];
   const skipped: { assetId: string; ratio: ResizeRatio }[] = [];
   for (const sourceId of sources) {
@@ -34,22 +34,29 @@ export async function expandEcommerceImages({ projectId, assetIds, ratios, outpa
     for (const ratio of wanted) {
       const scales = expandScales(dimensions.width || 1, dimensions.height || 1, ratio);
       if (!scales) { skipped.push({ assetId: sourceId, ratio }); continue; }
-      const found = existing.find(item => item.sourceAssetId === sourceId && item.ratio === ratio && item.mode === 'expand');
-      if (found) { derived.push({ ...found, created: false }); continue; }
-      const expanded = await outpaint({ bytes: original, mimeType: asset.mimeType || 'image/png', ratio });
-      const filename = `${output.sku}-${output.task}-${ratio.replace(':', 'x')}-expand.png`;
-      const persisted = await persistLocalProjectAsset({ projectId, filename, mimeType: 'image/png', bytes: expanded.bytes });
-      const metadata = {
-        provider: 'bailian-outpaint', requestId: expanded.requestId,
-        resize: { ratio, mode: 'expand', sourceAssetId: sourceId },
-        ecommerce: { sku: output.sku, role: 'product', preserve: output.preserve || '', color: output.color || '' },
-        ecommerceOutput: { ...output, ratio, derivedFrom: sourceId },
-      };
-      const id = await recordUserAsset({ id: persisted.assetId, type: 'image', source: 'derived', storageProvider: 'local', bucket: LOCAL_PROJECT_ASSET_BUCKET, objectKey: persisted.objectKey, publicUrl: persisted.publicUrl, filename: persisted.filename, mimeType: 'image/png', sizeBytes: persisted.sizeBytes, sha256: persisted.sha256, originProjectId: projectId, width: expanded.width, height: expanded.height, metadata });
-      await linkProjectAsset({ projectId, assetId: id, role: 'generated' });
-      const saved: DerivedSize = { id, url: persisted.publicUrl, sourceAssetId: sourceId, ratio, mode: 'expand', sku: output.sku, task: output.task, filename: persisted.filename };
-      existing.push(saved);
-      derived.push({ ...saved, created: true });
+      derived.push(await runEcommercePaidJob({
+        projectId, operation: 'expand', identity: [sourceId, ratio],
+        snapshot: { sourceId, ratio },
+        findExisting: async () => {
+          const row = await findDerivedImage(projectId, { '$.resize.sourceAssetId': sourceId, '$.resize.ratio': ratio, '$.resize.mode': 'expand' });
+          return row ? toDerived(row) : null;
+        },
+        create: async hooks => {
+          const expanded = await outpaint({ bytes: original, mimeType: asset.mimeType || 'image/png', ratio }, undefined, hooks);
+          const filename = `${output.sku}-${output.task}-${ratio.replace(':', 'x')}-expand.png`;
+          const persisted = await persistLocalProjectAsset({ projectId, filename, mimeType: 'image/png', bytes: expanded.bytes });
+          const metadata = {
+            provider: 'bailian-outpaint', requestId: expanded.requestId,
+            resize: { ratio, mode: 'expand', sourceAssetId: sourceId },
+            ecommerce: { sku: output.sku, role: 'product', preserve: output.preserve || '', color: output.color || '' },
+            ecommerceOutput: { ...output, ratio, derivedFrom: sourceId },
+          };
+          const id = await recordUserAsset({ id: persisted.assetId, type: 'image', source: 'derived', storageProvider: 'local', bucket: LOCAL_PROJECT_ASSET_BUCKET, objectKey: persisted.objectKey, publicUrl: persisted.publicUrl, filename: persisted.filename, mimeType: 'image/png', sizeBytes: persisted.sizeBytes, sha256: persisted.sha256, originProjectId: projectId, width: expanded.width, height: expanded.height, metadata });
+          await linkProjectAsset({ projectId, assetId: id, role: 'generated' });
+          const saved: DerivedSize = { id, url: persisted.publicUrl, sourceAssetId: sourceId, ratio, mode: 'expand', sku: output.sku!, task: output.task!, filename: persisted.filename };
+          return saved;
+        },
+      }));
     }
   }
   return { derived, skipped };

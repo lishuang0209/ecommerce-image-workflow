@@ -12,7 +12,7 @@ export type DerivedSize = { id: string; url: string; sourceAssetId: string; rati
 const resizeMeta = (metadata: unknown) => (metadata as { resize?: { ratio?: ResizeRatio; mode?: DerivedMode; sourceAssetId?: string } } | null)?.resize;
 const outputMeta = (metadata: unknown) => (metadata as { ecommerceOutput?: SourceOutput } | null)?.ecommerceOutput;
 
-function toDerived(row: { id: string; publicUrl: string; filename: string | null; metadata: unknown }): DerivedSize | null {
+export function toDerived(row: { id: string; publicUrl: string; filename: string | null; metadata: unknown }): DerivedSize | null {
   const resize = resizeMeta(row.metadata), output = outputMeta(row.metadata);
   if (!resize?.ratio || (resize.mode !== 'crop' && resize.mode !== 'pad' && resize.mode !== 'expand') || !resize.sourceAssetId) return null;
   return { id: row.id, url: row.publicUrl, sourceAssetId: resize.sourceAssetId, ratio: resize.ratio, mode: resize.mode, sku: output?.sku || '', task: output?.task || '', filename: row.filename || row.id };

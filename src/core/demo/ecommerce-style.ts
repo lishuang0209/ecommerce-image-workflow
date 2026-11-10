@@ -1,3 +1,4 @@
+import { findDerivedImage, runEcommercePaidJob } from './ecommerce-paid-job';
 import sharp from 'sharp';
 import { readFile, unlink } from 'node:fs/promises';
 import { LOCAL_PROJECT_ASSET_BUCKET, persistLocalProjectAsset, resolveLocalProjectAssetPath } from '@/core/projects/local-project-assets';
@@ -34,32 +35,38 @@ export async function restyleEcommerceImages({ projectId, assetIds, preset, gene
   if (!stylePresets[preset]) throw new Error('Choose a style.');
   const sources = [...new Set(assetIds)];
   if (!sources.length || sources.length > MAX_STYLE_IMAGES) throw new Error(`Restyle at most ${MAX_STYLE_IMAGES} images at a time.`);
-  const existing = await listStyledImages(projectId);
   const styled: (StyledImage & { created: boolean })[] = [];
   for (const sourceId of sources) {
     const asset = await getProjectAssetById({ projectId, assetId: sourceId });
     const output = outputMeta(asset?.metadata);
     if (!asset || asset.type !== 'image' || asset.source !== 'provider' || asset.storageProvider !== 'local' || asset.bucket !== LOCAL_PROJECT_ASSET_BUCKET || !output?.sku || !output.task) throw new Error('Only saved ecommerce results can be restyled.');
-    const found = existing.find(item => item.sourceAssetId === sourceId && item.preset === preset);
-    if (found) { styled.push({ ...found, created: false }); continue; }
-    const original = await readFile(resolveLocalProjectAssetPath({ objectKey: asset.objectKey }));
-    const dimensions = await sharp(original).metadata();
-    const ratio = nearestStyleFrame(dimensions.width || 1, dimensions.height || 1);
-    const generated = await generate({ bytes: original, mimeType: asset.mimeType || 'image/png', prompt: stylePrompt(preset), ratio });
-    const meta = await sharp(generated.bytes).metadata();
-    const filename = `${output.sku}-${output.task}-${preset}.png`;
-    const persisted = await persistLocalProjectAsset({ projectId, filename, mimeType: 'image/png', bytes: generated.bytes });
-    const metadata = {
-      provider: 'bailian', requestId: generated.requestId,
-      style: { preset, sourceAssetId: sourceId },
-      ecommerce: { sku: output.sku, role: 'product', preserve: output.preserve || '', color: output.color || '' },
-      ecommerceOutput: { ...output, style: preset, derivedFrom: sourceId },
-    };
-    const id = await recordUserAsset({ id: persisted.assetId, type: 'image', source: 'derived', storageProvider: 'local', bucket: LOCAL_PROJECT_ASSET_BUCKET, objectKey: persisted.objectKey, publicUrl: persisted.publicUrl, filename: persisted.filename, mimeType: 'image/png', sizeBytes: persisted.sizeBytes, sha256: persisted.sha256, originProjectId: projectId, width: meta.width, height: meta.height, metadata });
-    await linkProjectAsset({ projectId, assetId: id, role: 'generated' });
-    const saved: StyledImage = { id, url: persisted.publicUrl, sourceAssetId: sourceId, preset, sku: output.sku, task: output.task, filename: persisted.filename };
-    existing.push(saved);
-    styled.push({ ...saved, created: true });
+    styled.push(await runEcommercePaidJob({
+      projectId, operation: 'style', identity: [sourceId, preset],
+      snapshot: { sourceId, preset, prompt: stylePrompt(preset) },
+      findExisting: async () => {
+        const row = await findDerivedImage(projectId, { '$.style.sourceAssetId': sourceId, '$.style.preset': preset });
+        return row ? toStyled(row) : null;
+      },
+      create: async hooks => {
+        const original = await readFile(resolveLocalProjectAssetPath({ objectKey: asset.objectKey }));
+        const dimensions = await sharp(original).metadata();
+        const ratio = nearestStyleFrame(dimensions.width || 1, dimensions.height || 1);
+        const generated = await generate({ bytes: original, mimeType: asset.mimeType || 'image/png', prompt: stylePrompt(preset), ratio }, hooks);
+        const meta = await sharp(generated.bytes).metadata();
+        const filename = `${output.sku}-${output.task}-${preset}.png`;
+        const persisted = await persistLocalProjectAsset({ projectId, filename, mimeType: 'image/png', bytes: generated.bytes });
+        const metadata = {
+          provider: 'bailian', requestId: generated.requestId,
+          style: { preset, sourceAssetId: sourceId },
+          ecommerce: { sku: output.sku, role: 'product', preserve: output.preserve || '', color: output.color || '' },
+          ecommerceOutput: { ...output, style: preset, derivedFrom: sourceId },
+        };
+        const id = await recordUserAsset({ id: persisted.assetId, type: 'image', source: 'derived', storageProvider: 'local', bucket: LOCAL_PROJECT_ASSET_BUCKET, objectKey: persisted.objectKey, publicUrl: persisted.publicUrl, filename: persisted.filename, mimeType: 'image/png', sizeBytes: persisted.sizeBytes, sha256: persisted.sha256, originProjectId: projectId, width: meta.width, height: meta.height, metadata });
+        await linkProjectAsset({ projectId, assetId: id, role: 'generated' });
+        const saved: StyledImage = { id, url: persisted.publicUrl, sourceAssetId: sourceId, preset, sku: output.sku!, task: output.task!, filename: persisted.filename };
+        return saved;
+      },
+    }));
   }
   return styled;
 }

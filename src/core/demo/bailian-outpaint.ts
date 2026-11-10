@@ -1,3 +1,4 @@
+import { PaidSubmissionRejectedError, isDefiniteSubmissionRejection, type PaidSubmissionHooks } from './paid-submission';
 import sharp from 'sharp';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
@@ -14,12 +15,13 @@ const codeOf = (value: unknown) => String(value || 'unknown').replace(/[^a-zA-Z0
  * Extends one image to a target ratio with Bailian's outpainting model. The source stays centred; only the
  * new margin is generated. `output_ratio` is the whole request, so this never crops and never redraws the product.
  */
-export async function outpaintBailianImage({ bytes, mimeType, ratio }: { bytes: Uint8Array; mimeType: string; ratio: ResizeRatio }, deps?: { fetch?: typeof fetch; key?: string; origin?: string }) {
+export async function outpaintBailianImage({ bytes, mimeType, ratio }: { bytes: Uint8Array; mimeType: string; ratio: ResizeRatio }, deps?: { fetch?: typeof fetch; key?: string; origin?: string }, submission?: PaidSubmissionHooks) {
   if (!isExpandRatio(ratio)) throw new Error('This ratio cannot be expanded. Use crop or pad.');
   const key = deps?.key ?? await getConfig('BAILIAN_API_KEY');
   if (!key) throw new Error('Save your Bailian API key first.');
   const origin = bailianOrigin(deps?.origin ?? ((await getConfig('BAILIAN_API_BASE_URL')) || 'https://dashscope.aliyuncs.com'));
   const fetcher = deps?.fetch ?? fetch;
+  await submission?.beforeSubmit();
   const submit = await fetcher(`${origin}/api/v1/services/aigc/image2image/out-painting`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}`, 'X-DashScope-Async': 'enable' },
@@ -27,7 +29,7 @@ export async function outpaintBailianImage({ bytes, mimeType, ratio }: { bytes: 
     signal: AbortSignal.timeout(60_000),
   });
   const submitted = await submit.json();
-  if (!submit.ok || submitted.code) throw new Error(`Bailian expand failed (${submit.status}, ${codeOf(submitted.code)}).`);
+  if (!submit.ok || submitted.code) throw new (isDefiniteSubmissionRejection(submit.status, submitted.output) ? PaidSubmissionRejectedError : Error)(`Bailian expand failed (${submit.status}, ${codeOf(submitted.code)}).`);
   const taskId = String(submitted.output?.task_id || '').replace(/[^a-zA-Z0-9-]/g, '');
   if (!taskId) throw new Error('Bailian expand returned no task.');
   const deadline = Date.now() + 180_000;

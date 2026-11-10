@@ -1,3 +1,4 @@
+import { EcommercePaidJobError } from '@/core/demo/ecommerce-paid-job';
 import { createFileRoute } from '@tanstack/react-router';
 import { z } from 'zod';
 import { expandEcommerceImages } from '@/core/demo/ecommerce-expand';
@@ -27,6 +28,7 @@ async function POST({ request }: { request: Request }) {
     if (input.mode === 'expand') return Response.json(await expandEcommerceImages({ projectId: input.projectId, assetIds: input.assetIds, ratios: input.ratios as never }));
     return Response.json({ derived: await deriveResizedAssets({ ...input, ratios: input.ratios as never, mode: input.mode }) });
   } catch (error) {
+    if (error instanceof EcommercePaidJobError) return Response.json({ error: error.message, code: error.code, jobId: error.jobId }, { status: 409 });
     return Response.json({ error: error instanceof Error ? error.message : 'Unable to resize images.' }, { status: 400 });
   }
 }

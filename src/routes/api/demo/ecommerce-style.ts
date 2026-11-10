@@ -1,3 +1,4 @@
+import { EcommercePaidJobError } from '@/core/demo/ecommerce-paid-job';
 import { createFileRoute } from '@tanstack/react-router';
 import { z } from 'zod';
 import { deleteStyledImage, listStyledImages, restyleEcommerceImages, stylePresetIds, type StylePreset } from '@/core/demo/ecommerce-style';
@@ -23,6 +24,7 @@ async function POST({ request }: { request: Request }) {
     }).strict().parse(await readRequestJsonWithLimit(request, 8192));
     return Response.json({ styled: await restyleEcommerceImages(input) });
   } catch (error) {
+    if (error instanceof EcommercePaidJobError) return Response.json({ error: error.message, code: error.code, jobId: error.jobId }, { status: 409 });
     return Response.json({ error: error instanceof Error ? error.message : 'Unable to restyle images.' }, { status: 400 });
   }
 }

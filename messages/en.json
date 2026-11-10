@@ -457,6 +457,8 @@
         "discardPrompt": "Discard draft"
       },
       "ecommerce": {
+        "paidJobPending": "This task is running or awaiting verification. The duplicate was blocked. Refresh the results later; if interrupted, check the provider records first.",
+        "paidJobReviewRequired": "The previous request may have been accepted, or its saved result is unavailable. Regeneration is blocked. Check provider records and local results to avoid duplicate charges.",
         "title": "Ecommerce materials",
         "hint": "Import photos with SKU, shot type and preservation requirements. Importing creates no generation tasks and calls no models.",
         "sku": "SKU name",

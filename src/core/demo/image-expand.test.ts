@@ -38,3 +38,18 @@ test('outpainting asks for the ratio, refuses a watermark, and only downloads an
     key: 'test-key', origin: 'https://dashscope.aliyuncs.com',
   }), /Unexpected Bailian output host/);
 });
+
+
+test('outpaint commits submission protection before POST and distinguishes explicit refusal', async () => {
+  const { PaidSubmissionRejectedError } = await import('./paid-submission');
+  let marked = false, calls = 0;
+  const deps = { key: 'test-key', origin: 'https://dashscope.aliyuncs.com', fetch: (async () => {
+    assert.equal(marked, true); calls++;
+    return new Response(JSON.stringify({ code: 'InvalidParameter' }), { status: 400 });
+  }) as typeof fetch };
+  const input = { bytes: new Uint8Array(), mimeType: 'image/png', ratio: '3:4' as const };
+  await assert.rejects(outpaintBailianImage(input, deps, { beforeSubmit: async () => { throw new Error('claim lost'); } }), /claim lost/);
+  assert.equal(calls, 0);
+  await assert.rejects(outpaintBailianImage(input, deps, { beforeSubmit: async () => { marked = true; } }), PaidSubmissionRejectedError);
+  assert.equal(calls, 1);
+});

@@ -1,3 +1,4 @@
+import { paidJobErrorKey } from '@/lib/ecommerce-paid-job-error';
 import { useEffect, useMemo, useState } from 'react';
 import type { CanvasCard } from '@/core/beatcanvas/canvas-types';
 import { apiJsonDelete, apiJsonGet, apiJsonPost } from '@/lib/api-client';
@@ -42,7 +43,7 @@ export function EcommerceStylePanel({ projectId, cards, onChanged }: { projectId
       setNotice(t('styleDone', { created, reused: result.styled.length - created }));
       await reload();
       onChanged?.();
-    } catch (cause) { setError(cause instanceof Error ? cause.message : t('failed')); }
+    } catch (cause) { const key = paidJobErrorKey(cause); setError(key ? t(key) : cause instanceof Error ? cause.message : t('failed')); }
     finally { setBusy(false); }
   }
   async function remove(assetId: string) {

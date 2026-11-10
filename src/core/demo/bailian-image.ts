@@ -1,3 +1,4 @@
+import { PaidSubmissionRejectedError, isDefiniteSubmissionRejection, type PaidSubmissionHooks } from './paid-submission';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { getBeatDesignDataRoot } from '@/config/data-root';
@@ -24,7 +25,7 @@ export async function downloadBailianOutput(image: string, fetcher: typeof fetch
   try { while (true) { const { done, value } = await reader.read(); if (done) break; length += value.length; if (length > 20 * 1024 * 1024) { await reader.cancel(); throw new Error('Image exceeds size limit.'); } chunks.push(value); } } finally { reader.releaseLock(); }
   return Buffer.concat(chunks);
 }
-export async function generateBailianImage({ bytes, mimeType, prompt, ratio, references, quality }: { bytes?: Uint8Array; mimeType?: string; prompt: string; ratio: string; references?: { bytes: Uint8Array; mimeType: string }[]; quality?: string }) {
+export async function generateBailianImage({ bytes, mimeType, prompt, ratio, references, quality }: { bytes?: Uint8Array; mimeType?: string; prompt: string; ratio: string; references?: { bytes: Uint8Array; mimeType: string }[]; quality?: string }, submission?: PaidSubmissionHooks) {
   const key = await getConfig('BAILIAN_API_KEY');
   if (!key) throw new Error('Save your Bailian API key first.');
   const origin = bailianOrigin(await getConfig('BAILIAN_API_BASE_URL') || 'https://dashscope.aliyuncs.com');
@@ -34,13 +35,14 @@ export async function generateBailianImage({ bytes, mimeType, prompt, ratio, ref
   if (quality && quality !== '1k') throw new Error('Bailian MVP currently supports 1k output only.');
   const images = references || (bytes && mimeType ? [{ bytes, mimeType }] : []);
   if (!images.length || images.length > 10) throw new Error('Connect 1–10 image references.');
+  await submission?.beforeSubmit();
   const response = await fetch(`${origin}/api/v1/services/aigc/multimodal-generation/generation`, {
     method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
     body: JSON.stringify({ model: 'qwen-image-2.1-turbo', input: { messages: [{ role: 'user', content: [...images.map(image => ({ image: `data:${image.mimeType};base64,${Buffer.from(image.bytes).toString('base64')}` })), { text: prompt }] }] }, parameters: { size, n: 1, prompt_extend: false, watermark: false } }),
     signal: AbortSignal.timeout(600000),
   });
   const result = await response.json();
-  if (!response.ok || result.code) throw new Error(`Bailian request failed (${response.status}, ${String(result.code || 'unknown').replace(/[^a-zA-Z0-9_.-]/g, '').slice(0, 80)}).`);
+  if (!response.ok || result.code) throw new (isDefiniteSubmissionRejection(response.status, result.output) ? PaidSubmissionRejectedError : Error)(`Bailian request failed (${response.status}, ${String(result.code || 'unknown').replace(/[^a-zA-Z0-9_.-]/g, '').slice(0, 80)}).`);
   const receiptRoot = resolve(getBeatDesignDataRoot(), 'bailian-receipts');
   await mkdir(receiptRoot, { recursive: true, mode: 0o700 });
   await writeFile(resolve(receiptRoot, `${String(result.request_id).replace(/[^a-zA-Z0-9-]/g, '')}.json`), JSON.stringify(result), { mode: 0o600 });
