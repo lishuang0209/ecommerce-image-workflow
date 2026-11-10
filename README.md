@@ -1,4 +1,4 @@
-> **本仓库为电商工作流开发分支。启动与使用请先阅读 [电商项目说明](README_ECOMMERCE.md)。** 以下保留 BeatDesign 原项目说明。
+> **本仓库统一管理电商前端与视频后端。启动与使用请先阅读 [电商项目说明](README_ECOMMERCE.md)。** 以下保留 BeatDesign 原项目说明。
 
 <p align="center">
   <img src="./docs/assets/beatdesign-readme-cover-v3.jpg" alt="BeatDesign infinite Canvas and local video Editor" width="100%" />

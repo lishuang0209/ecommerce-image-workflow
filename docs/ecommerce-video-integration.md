@@ -5,11 +5,13 @@
 
 ---
 
+> 仓库已统一：主前端在根目录，后端在 `apps/video-agent/backend/`；根目录运行 `pnpm dev:all`。前后端统一提交到 `main`，原仓库历史保留。
+
 ## 1. 背景与目标
 
 本项目是在 [BeatDesign](https://github.com/BeatAPI/BeatDesign)（本地优先的 AI 画布 / 视频编辑器）基础上做的电商二开分支。
 
-目标：在 BeatDesign 的「电商视频」画布项目里，接入另一个服务 **shortfilm-agent**（位于 `/Users/xiaoxiao/shortfilm-agent`）的 6 阶段短视频流水线：
+目标：在 BeatDesign 的「电商视频」画布项目里，接入另一个服务 **shortfilm-agent**（位于 `apps/video-agent`）的 6 阶段短视频流水线：
 
 ```
 ① 广告脚本 → ② 商品与模特 → ③ 广告分镜 → ④ 画面 → ⑤ 视频 → ⑥ 成片
@@ -101,7 +103,7 @@ PORT=3021 node scripts/start-local.mjs
 ### 启动 shortfilm-agent
 
 ```bash
-cd /Users/xiaoxiao/shortfilm-agent/backend
+cd apps/video-agent/backend
 uv run python api_server.py   # http://127.0.0.1:8000
 ```
 
@@ -137,7 +139,7 @@ SHORTFILM_LLM_MODEL / SHORTFILM_VLM_MODEL / SHORTFILM_IMAGE_T2I_MODEL / ...
 | `src/components/beatcanvas/beatcanvas-shell.tsx` | 画布主壳，约 1791 行处挂载 `EcommerceVideoPanel`（`videoProject` 分支） |
 | `src/core/demo/create-canvas.ts` | 视频模板初始化：只放一张空的「商品信息」卡（`video-product-facts`） |
 
-### shortfilm-agent 侧（`/Users/xiaoxiao/shortfilm-agent`）
+### shortfilm-agent 侧（`apps/video-agent`）
 
 | 文件 | 职责 |
 |---|---|
@@ -292,7 +294,7 @@ POST {action:'continue', stage, locale}   → 确认阶段，写 confirmedStages
 |---|---|
 | BeatDesign 仓库 | `/Users/xiaoxiao/Documents/生图生视频测试题/work/repos/BeatDesign` |
 | 分支 / remote | `feature/ecommerce-video` → `origin`（github.com/lishuang0209/ecommerce-image-workflow） |
-| shortfilm-agent | `/Users/xiaoxiao/shortfilm-agent`（backend :8000） |
+| shortfilm-agent | `apps/video-agent`（backend :8000） |
 | Node / pnpm | v24 / 10.32.1（用 `npx pnpm@10.32.1`） |
 | 端口 | BeatDesign dev 3020、prod 3021；shortfilm 8000 |
 | ffmpeg | ✅ 项目 Python 依赖 `imageio-ffmpeg` 提供；真实合成测试通过 |

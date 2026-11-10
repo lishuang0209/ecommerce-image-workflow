@@ -41,7 +41,10 @@
     "db:push": "drizzle-kit push --config=drizzle.config.ts",
     "db:generate": "drizzle-kit generate --config=drizzle.config.ts",
     "db:migrate": "drizzle-kit migrate --config=drizzle.config.ts",
-    "db:studio": "drizzle-kit studio --config=drizzle.config.ts"
+    "db:studio": "drizzle-kit studio --config=drizzle.config.ts",
+    "dev:all": "node scripts/dev-fullstack.mjs",
+    "dev:video": "node scripts/dev-fullstack.mjs --backend-only",
+    "test:backend": "uv run --directory apps/video-agent/backend --locked --extra dev pytest"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1069.0",

@@ -122,3 +122,7 @@ No user, session, role, order, subscription, payment, credit, API-key, ticket, o
 ## Runtime boundary
 
 BeatDesign is a localhost application backed by one SQLite database and project-owned files under `data/`. Cloud database and hosted deployment adapters are intentionally outside this repository.
+
+## Ecommerce video service in this fork
+
+The ecommerce integration keeps the main web application at the repository root and imports the video service under `apps/video-agent/` with its original Git history and MIT license. The reference Next.js frontend within that subtree is retained but is not launched by the main workflow. The root web server calls the Python service over local HTTP (default 8000), and imports media into the existing project asset store. `dev:all` starts both services; no additional project database or cloud account is introduced. Local service config and generated media are ignored.

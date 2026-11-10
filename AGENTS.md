@@ -87,3 +87,11 @@ pnpm build
 Run focused browser and MCP checks when changing Canvas, Editor, project persistence, provider submission, or Agent-visible behavior. A release check additionally requires clean installation/schema setup, MCP handshake, and local route smoke testing as defined in `docs/RELEASE_SCOPE.md`.
 
 Keep these states separate when reporting completion: source change, automated checks, browser validation, MCP-to-UI validation, credentialed or paid BeatAPI end-to-end validation, commit, push/merge, GitHub Release, hosted demo, and deployment. Never infer a later state from an earlier one.
+
+## Ecommerce monorepo
+
+- The active web workspace remains at the repository root. Video service source is in `apps/video-agent/backend/`; its scoped AGENTS.md and CLAUDE.md apply there.
+- `apps/video-agent/frontend/` is the preserved standalone reference UI, not the main ecommerce UI. Do not duplicate product changes into it unless requested.
+- Run `pnpm dev:all` for web + video service; `pnpm dev:video` starts only the video service.
+- Verify video backend changes with `pnpm test:backend`, in addition to the frontend checks above when applicable.
+- Runtime data, provider configuration, generated media and virtual environments remain ignored. Preserve the imported MIT license separately from the root Apache-2.0 license.
