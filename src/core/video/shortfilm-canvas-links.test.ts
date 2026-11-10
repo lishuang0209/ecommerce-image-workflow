@@ -31,3 +31,18 @@ test('missing nodes and unknown episode membership never produce guessed or dang
   const cards = ['video-ad-script', 'video-clip-a', 'video-final-episode-1'].map((id) => buildTextCard({ id, name: id }));
   assert.deepEqual(buildShortfilmCanvasLinks(cards), []);
 });
+
+test('compact workflow lanes align corresponding clips and keep manual nodes untouched', async () => {
+  const { buildShortfilmCanvasLayout } = await import('./shortfilm-canvas-links');
+  const ids = ['manual', 'video-ad-script', 'video-ad-storyboard', 'video-reference-a', 'video-reference-b', 'video-clip-b', 'video-clip-a', 'video-final-episode-1'];
+  const cards = ids.map((id) => buildTextCard({ id, name: id }));
+  const frames = Object.fromEntries(ids.map((id) => [id, { x: 100, y: 3820, w: 340, h: 320 }]));
+  const storyboard = { episodes: [{ episode_number: 1, segments: [{ segment_id: 'a' }, { segment_id: 'b' }] }] };
+  const result = applyCanvasOperations({ version: 4, cards, frames }, buildShortfilmCanvasLayout(cards, frames, storyboard)).document;
+  assert.deepEqual(result.frames.manual, frames.manual);
+  assert.equal(result.frames['video-reference-a'].y, result.frames['video-clip-a'].y);
+  assert.equal(result.frames['video-reference-b'].y, result.frames['video-clip-b'].y);
+  assert.equal(result.frames['video-clip-a'].x - result.frames['video-reference-a'].x, 420);
+  assert.equal(result.frames['video-final-episode-1'].x - result.frames['video-clip-a'].x, 420);
+  assert.deepEqual(buildShortfilmCanvasLayout(cards, result.frames, storyboard), []);
+});

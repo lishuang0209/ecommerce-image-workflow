@@ -922,7 +922,9 @@
         "videoFrameVersion": "AI生成：v{number}",
         "videoFrameUploadedVersion": "上传：v{number}",
         "videoClipVersionSelected": "已切换视频版本并同步画布，请重新确认视频并合成成片。",
-        "videoClipPromptHint": "保存仅更新提示词，不调用模型；点击重新生成后应用到视频。"
+        "videoClipPromptHint": "保存仅更新提示词，不调用模型；点击重新生成后应用到视频。",
+        "videoAdoptExisting": "采用现有视频继续合成",
+        "videoAdoptExistingConfirm": "将使用当前选中的已有视频合成，保留旧画面和内容，不应用尚未重新生成的修改。不调用视频生成模型。是否继续？"
       }
     },
     "editor": {

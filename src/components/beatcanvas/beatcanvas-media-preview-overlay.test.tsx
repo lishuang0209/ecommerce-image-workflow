@@ -40,5 +40,6 @@ test('media preview overlay renders video playback controls', () => {
   assert.match(html, /<video/);
   assert.match(html, /blob:local-video-preview/);
   assert.match(html, /controls=""/);
+  assert.doesNotMatch(html, /muted=""/);
   assert.match(html, /Motion reference/);
 });

@@ -922,7 +922,9 @@
         "videoFrameVersion": "AI: v{number}",
         "videoFrameUploadedVersion": "Upload: v{number}",
         "videoClipVersionSelected": "Video version selected and synced to the canvas. Confirm videos and assemble again.",
-        "videoClipPromptHint": "Saving updates the prompt without generation. Regenerate to apply it to the video."
+        "videoClipPromptHint": "Saving updates the prompt without generation. Regenerate to apply it to the video.",
+        "videoAdoptExisting": "Use existing videos and assemble",
+        "videoAdoptExistingConfirm": "Assemble the currently selected existing videos without applying pending visual or content changes? No video generation model will be called."
       }
     },
     "editor": {

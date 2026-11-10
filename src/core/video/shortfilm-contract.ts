@@ -307,7 +307,7 @@ export function videoSegmentDescription(segment: ShortfilmStoryboardSegment): st
   return (segment.shots ?? []).map((shot, index) => `Shot ${index + 1} [${shot.duration ?? 2}s] ${shot.shot_type ?? ''}: ${shot.content ?? ''}`).join('\n');
 }
 
-export type ShortfilmFinalArtifact = { final_videos?: Array<{ episode: number; name: string; path: string }> };
+export type ShortfilmFinalArtifact = { final_videos?: Array<{ episode: number; name: string; path: string; preview_path?: string }> };
 export function finalIsReady(status: Record<string, string> | undefined): boolean {
   return ['completed', 'waiting'].includes(status?.[SHORTFILM_FINAL_STAGE] ?? '');
 }

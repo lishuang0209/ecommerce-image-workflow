@@ -19,6 +19,11 @@ Image tiles in the project Asset library also offer **Set as cover**.
   failed poster shows a placeholder; the original video is never loaded by a card.
 - Missing/deleted manual cover Assets fall back automatically. Removing the cover
   choice never deletes an Asset. Project cards and the settings preview use 16:9.
+- Cover candidates collapse identical file hashes (legacy files fall back to URL),
+  keeping the selected Asset ID. This only changes the picker, not stored Assets
+  or Canvas/Timeline references. Video workflow imports reuse an existing local
+  Asset only within the same project, media type, content hash and workflow metadata;
+  concurrent retries are serialized, while changed content remains a new Asset.
 - Existing covers are preserved as manual during additive SQLite startup upgrades.
   The schema default also preserves legacy covers when applying `db:push` first;
   new projects explicitly start in automatic mode. Upgrade tests use isolated data.

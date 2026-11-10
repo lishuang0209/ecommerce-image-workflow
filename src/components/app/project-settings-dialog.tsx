@@ -29,6 +29,7 @@ import {
 } from '@/core/workspace-lib/app/workspace-query-invalidation';
 import type { ProjectSettings } from '@/core/projects/project-settings-contract';
 import { ApiError } from '@/lib/api-client';
+import { projectCoverCandidates } from '@/core/projects/project-cover-candidates';
 
 export function ProjectSettingsDialog({
   projectId,
@@ -297,7 +298,7 @@ export function ProjectSettingsDialog({
                     <>
                       <p className="text-xs text-white/50">{t('choose')}</p>
                       <div className="grid max-h-44 grid-cols-4 gap-2 overflow-y-auto p-1">
-                        {images.map((image) => (
+                        {projectCoverCandidates(images, coverId).map((image) => (
                           <button
                             type="button"
                             key={image.id}

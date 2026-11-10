@@ -30,10 +30,12 @@ test('storyboard route enforces confirmations, imports one durable card, restore
   let final: any = {};
   let finalExecutions = 0;
   let failFinal = false;
+  let invalidFinalPreview = false;
   let videoExecutions = 0;
   let failVideos = false;
   let invalidVideoDownload = false;
   const mp4 = await readFile('tests/fixtures/tiny-black.mp4');
+  const webm = await readFile('tests/fixtures/tiny-black.webm');
   let referenceExecutions = 0;
   let failReferences = false;
   let executions = 0;
@@ -74,12 +76,12 @@ test('storyboard route enforces confirmations, imports one durable card, restore
       return Response.json({ artifact: references });
     }
     if (path.endsWith('/artifact/post_production')) return Response.json({ artifact: final });
-    if (path.startsWith('/code/final-')) return new Response(mp4, { headers: { 'content-type': 'video/mp4' } });
+    if (path.startsWith('/code/final-')) return new Response(path.endsWith('.webm') ? (invalidFinalPreview ? 'invalid preview' : webm) : mp4, { headers: { 'content-type': path.endsWith('.webm') ? 'video/webm' : 'video/mp4' } });
     if (path.endsWith('/execute/post_production')) {
       finalExecutions++;
       status.current_stage = 'post_production';
       status.status.post_production = failFinal ? 'error' : 'completed';
-      if (!failFinal) final = { final_videos: [{ episode: 1, name: 'Ad', path: `code/final-${finalExecutions}.mp4` }] };
+      if (!failFinal) final = { final_videos: [{ episode: 1, name: 'Ad', path: `code/final-${finalExecutions}.mp4`, preview_path: `code/final-${finalExecutions}.webm` }] };
       return new Response('data: {"status":"completed"}\n\n');
     }
     if (path.endsWith('/artifact/video_generation')) {
@@ -215,7 +217,7 @@ test('storyboard route enforces confirmations, imports one durable card, restore
     assert.ok(!uploaded.state.confirmedStages.includes('reference_generation'));
     const uploadedCard = uploaded.document.cards.find((card: any) => card.id === frameCard.id);
     assert.equal(uploaded.state.reference.scenes[0].selected, uploadedCard.url);
-    assert.notEqual(uploadedCard.url, frameCard.url);
+    assert.equal(uploadedCard.url, frameCard.url, 'identical fixture bytes reuse the local asset');
     assert.deepEqual(uploaded.document.frames[frameCard.id], frames.document.frames[frameCard.id]);
     const promptExecutions = referenceExecutions;
     const savedFrame = await post({ action: 'frame_asset', sceneId: 'seg_01_01', operation: 'save', prompt: 'Close-up of the product' });
@@ -284,7 +286,7 @@ test('storyboard route enforces confirmations, imports one durable card, restore
     assert.equal(single.state.finalStale, true);
     assert.ok(!single.state.confirmedStages.includes('video_generation'));
     assert.deepEqual(single.document.frames[clipCard.id], generatedVideos.document.frames[clipCard.id]);
-    assert.notEqual(single.document.cards.find((card: any) => card.id === clipCard.id).url, clipCard.url);
+    assert.equal(single.document.cards.find((card: any) => card.id === clipCard.id).url, clipCard.url, 'identical video fixture bytes reuse the local asset');
     videos.clips.pop();
 
     const beforePromptSave = videoExecutions;
@@ -344,6 +346,29 @@ test('storyboard route enforces confirmations, imports one durable card, restore
     assert.equal((await post({ action: 'run', stage: 'post_production' })).status, 409);
     assert.equal((await post({ action: 'continue', stage: 'video_generation' })).status, 409);
     failVideos = false;
+    const beforeAdoption = videoExecutions;
+    const adoptionState = await read();
+    assert.equal((await post({ action: 'adopt_videos_and_assemble', baseRevision: '0'.repeat(64) })).status, 409);
+    const savedSelection = videos.clips[0].selected;
+    videos.clips[0].selected = '';
+    assert.equal((await post({ action: 'adopt_videos_and_assemble', baseRevision: (await read()).videoSelectionRevision })).status, 409);
+    videos.clips[0].selected = savedSelection;
+    invalidVideoDownload = true;
+    assert.equal((await post({ action: 'adopt_videos_and_assemble', baseRevision: adoptionState.videoSelectionRevision })).status, 502);
+    assert.equal((await read()).videoStale, true, 'invalid files must not be adopted');
+    invalidVideoDownload = false;
+    const adoptedResponse = await post({ action: 'adopt_videos_and_assemble', baseRevision: adoptionState.videoSelectionRevision });
+    assert.equal(adoptedResponse.status, 200, await adoptedResponse.clone().text());
+    const adopted = await adoptedResponse.json();
+    assert.equal(videoExecutions, beforeAdoption, 'adoption must not call video generation');
+    assert.equal(videos.clips[0].selected, savedSelection);
+    assert.equal(adopted.state.videoStale, false);
+    assert.deepEqual(adopted.state.staleVideoIds, []);
+    assert.ok(adopted.state.confirmedStages.includes('video_generation'));
+    assert.equal(adopted.state.finalStale, false);
+    assert.ok(adopted.state.final.final_videos[0].preview_path);
+    assert.notEqual(adopted.state.final.final_videos[0].preview_path, adopted.state.final.final_videos[0].path);
+    assert.equal((await readShortfilmSession(project.id))!.adoptedVideos!.revision, adoptionState.videoSelectionRevision);
     invalidVideoDownload = true;
     assert.equal((await post({ action: 'run', stage: 'video_generation' })).status, 502);
     assert.equal((await read()).videoStale, true);
@@ -363,7 +388,9 @@ test('storyboard route enforces confirmations, imports one durable card, restore
     assert.ok(finalCard.assetId);
     assert.ok(!finalCard.url.includes(':8000'));
     assert.equal(finalResult.state.finalStale, false);
-    assert.equal((await read()).final.final_videos[0].path, finalCard.url);
+    assert.equal((await read()).final.final_videos[0].preview_path, finalCard.url);
+    assert.notEqual((await read()).final.final_videos[0].path, finalCard.url);
+    assert.ok(!(await read()).final.final_videos[0].path.includes(':8000'));
     assert.equal((await post({ action: 'continue', stage: 'post_production' })).status, 200);
     const reassembled = await post({ action: 'run', stage: 'post_production' });
     assert.equal(reassembled.status, 200);
@@ -378,6 +405,13 @@ test('storyboard route enforces confirmations, imports one durable card, restore
     const preservedFinal = await loadProjectWithLatestSnapshot({ projectId: project.id });
     assert.equal(preservedFinal!.snapshot.cards.find((card: any) => card.id === finalCard.id)!.url, reassembledResult.document.cards.find((card: any) => card.id === finalCard.id).url);
     failFinal = false;
+    const previousDownload = (await read()).final.final_videos[0].path;
+    invalidFinalPreview = true;
+    assert.equal((await post({ action: 'run', stage: 'post_production' })).status, 502);
+    assert.equal((await read()).final.final_videos[0].path, previousDownload);
+    assert.equal((await read()).final.final_videos[0].preview_path, reassembledResult.document.cards.find((card: any) => card.id === finalCard.id).url);
+    assert.equal((await read()).finalStale, true);
+    invalidFinalPreview = false;
     assert.equal((await post({ action: 'run', stage: 'reference_generation' })).status, 200);
     assert.equal((await read()).videoStale, true);
     assert.equal((await read()).finalStale, true);

@@ -18,6 +18,9 @@ export type ShortfilmSessionRecord = {
   /** Undefined with videoStale means all clips (including legacy sessions). */
   staleVideoIds?: string[];
   finalStale?: boolean;
+  adoptedVideos?: { at: string; revision: string; clips: Array<{ id: string; selected: string }> };
+  /** Local MP4 download URLs; canvas final cards reference the WebM previews. */
+  finalDownloads?: Record<string, { sourcePath: string; url: string }>;
 };
 
 const sessionRoot = () => resolve(getBeatDesignDataRoot(), 'shortfilm-sessions');

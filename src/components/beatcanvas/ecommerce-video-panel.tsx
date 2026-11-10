@@ -62,6 +62,7 @@ type VideoState = {
   referenceStale?: boolean;
   video?: ShortfilmVideoArtifact | null;
   videoStale?: boolean;
+  videoSelectionRevision?: string | null;
   staleVideoIds?: string[];
   final?: ShortfilmFinalArtifact | null;
   finalStale?: boolean;
@@ -480,21 +481,26 @@ export function EcommerceVideoPanel({
     }
   };
 
-  const runFinal = async () => {
-    if (busy || workflowRunning || !clipsConfirmed || !clipsReady) return;
-    if (state?.final?.final_videos?.some((video) => video.path) && !window.confirm(t('videoReassembleConfirm'))) return;
+  const runFinal = async (adoptExisting = false) => {
+    if (busy || workflowRunning) return;
+    if (adoptExisting) {
+      if (!referenceConfirmed || !referenceReady || !hasVideoContent(state?.video, storyboard) || !state?.videoSelectionRevision) return;
+      if (!window.confirm(t('videoAdoptExistingConfirm'))) return;
+    } else if (!clipsConfirmed || !clipsReady) return;
+    if (!adoptExisting && state?.final?.final_videos?.some((video) => video.path) && !window.confirm(t('videoReassembleConfirm'))) return;
     setBusy(true);
     setError('');
     setNotice('');
     try {
       await flush();
       const result = await apiJsonPost<RunResult>('/api/demo/ecommerce-video', {
-        projectId, action: 'run', stage: SHORTFILM_FINAL_STAGE, locale,
+        projectId, locale, ...(adoptExisting ? { action: 'adopt_videos_and_assemble', baseRevision: state!.videoSelectionRevision } : { action: 'run', stage: SHORTFILM_FINAL_STAGE }),
       });
       if (result.document && typeof result.version === 'number') {
         onSavedSnapshot(result.document, result.version);
       }
       await refresh();
+      setSelectedStage(SHORTFILM_FINAL_STAGE);
       setNotice(t('videoFinalReady'));
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : t('videoError'));
@@ -1072,6 +1078,10 @@ export function EcommerceVideoPanel({
                   {clipsReady && !clipsConfirmed ? <button type="button" disabled={busy || offline || workflowRunning || !referenceConfirmed || Boolean(storyboardEdit) || Boolean(clipEdit) || Boolean(frameEdit)}
                     className={`${VIDEO_BUTTON_CLASS} min-h-10 flex-1 rounded px-3 text-xs`} onClick={() => void continueWorkflow(SHORTFILM_VIDEO_STAGE)}>{t('videoConfirmClips')}</button> : null}
                 </div>
+                {state?.videoStale && hasVideoContent(state?.video, storyboard) ? <button type="button"
+                  className={`${VIDEO_BUTTON_CLASS} min-h-10 w-full rounded px-3 text-xs`}
+                  disabled={busy || offline || workflowRunning || !referenceConfirmed || !referenceReady || Boolean(storyboardEdit) || Boolean(clipEdit) || Boolean(frameEdit)}
+                  onClick={() => void runFinal(true)}>{t('videoAdoptExisting')}</button> : null}
                 {clipsConfirmed ? <p className="text-xs text-white/55">{t('videoClipsConfirmed')}</p> : null}
               </section>
             ) : null}
@@ -1084,7 +1094,7 @@ export function EcommerceVideoPanel({
                   <span>{t(stageStatusKey(finalStatus))}</span></div>
                 {state?.finalStale && state.final?.final_videos?.length ? <p className="text-xs text-white/55">{t('videoFinalStale')}</p> : null}
                 {(state?.final?.final_videos ?? []).map((video) => video.path ? <figure key={video.episode} className="space-y-2">
-                  <video src={video.path} aria-label={video.name} controls playsInline preload="metadata" className="max-h-72 w-full rounded bg-black" />
+                  <video src={video.preview_path || video.path} aria-label={video.name} controls playsInline preload="metadata" className="max-h-72 w-full rounded bg-black" />
                   <figcaption className="flex items-center justify-between gap-2 text-xs text-white/70"><span>{video.name}</span>
                     <a href={video.path} download className={`${VIDEO_BUTTON_CLASS} rounded px-3 py-2`}>{t('videoDownloadFinal')}</a></figcaption>
                 </figure> : null)}

@@ -45,7 +45,6 @@ export function BeatCanvasMediaPreviewOverlay({
             aria-label={media.title}
             controls
             autoPlay
-            muted
             playsInline
             preload="metadata"
             className="max-h-[calc(100vh-140px)] max-w-full rounded-[10px] bg-black object-contain shadow-2xl"

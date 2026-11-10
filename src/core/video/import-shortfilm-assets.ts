@@ -1,7 +1,14 @@
+import { createHash } from 'node:crypto';
+import { isDeepStrictEqual } from 'node:util';
+import { and, asc, eq } from 'drizzle-orm';
+import { projectAssetMembership, userAsset } from '@/config/db/schema';
+import { withDatabaseTransaction } from '@/core/db/transaction-context';
 import {
   LOCAL_PROJECT_ASSET_BUCKET,
   persistLocalProjectAsset,
+  resolveLocalProjectAssetPath,
 } from '@/core/projects/local-project-assets';
+import { access } from 'node:fs/promises';
 import {
   linkProjectAsset,
   recordUserAsset,
@@ -63,40 +70,74 @@ async function importShortfilmMedia({
     throw new Error('Downloaded media is empty.');
   }
 
-  const mimeType = mediaType === 'video' ? 'video/mp4' : mimeFromUrl(url);
-  if (mediaType === 'video' && (bytes.length < 12 || new TextDecoder().decode(bytes.slice(4, 8)) !== 'ftyp')) {
-    throw new Error('Downloaded video is not a valid MP4 container.');
+  const webm = mediaType === 'video' && new URL(url).pathname.toLowerCase().endsWith('.webm');
+  const mimeType = mediaType === 'video' ? (webm ? 'video/webm' : 'video/mp4') : mimeFromUrl(url);
+  if (mediaType === 'video' && (webm
+    ? bytes.length < 16 || ![0x1a, 0x45, 0xdf, 0xa3].every((value, index) => bytes[index] === value) || !new TextDecoder().decode(bytes.slice(0, 128)).includes('webm')
+    : bytes.length < 12 || new TextDecoder().decode(bytes.slice(4, 8)) !== 'ftyp')) {
+    throw new Error('Downloaded video is not a valid MP4 or WebM container.');
   }
-  const persisted = await persistLocalProjectAsset({
-    projectId,
-    filename: filename ?? basename(url),
-    mimeType,
-    bytes,
-  });
-  const assetId = await recordUserAsset({
-    id: persisted.assetId,
-    type: mediaType,
-    source: 'provider',
-    storageProvider: 'local',
-    bucket: LOCAL_PROJECT_ASSET_BUCKET,
-    objectKey: persisted.objectKey,
-    publicUrl: persisted.publicUrl,
-    filename: persisted.filename,
-    mimeType,
-    sizeBytes: persisted.sizeBytes,
-    sha256: persisted.sha256,
-    originProjectId: projectId,
-    metadata: { provider: 'shortfilm', ...(metadata ?? {}) },
-  });
-  await linkProjectAsset({ projectId, assetId, role: 'generated' });
+  const sha256 = createHash('sha256').update(bytes).digest('hex');
+  const importMetadata = { provider: 'shortfilm', ...(metadata ?? {}) };
+  // Download outside the transaction. Serialize the content lookup and insert so
+  // retries (including concurrent requests) reuse the same project-owned Asset.
+  return withDatabaseTransaction(async (db) => {
+    const existing = await db.select({ asset: userAsset }).from(userAsset)
+      .innerJoin(projectAssetMembership, eq(projectAssetMembership.assetId, userAsset.id))
+      .where(and(
+        eq(projectAssetMembership.projectId, projectId),
+        eq(userAsset.type, mediaType),
+        eq(userAsset.source, 'provider'),
+        eq(userAsset.storageProvider, 'local'),
+        eq(userAsset.bucket, LOCAL_PROJECT_ASSET_BUCKET),
+        eq(userAsset.sha256, sha256),
+      )).orderBy(asc(userAsset.createdAt), asc(userAsset.id));
+    for (const { asset } of existing) {
+      // Keep distinct workflow identities/lineage even when their pixels match.
+      if (!isDeepStrictEqual(asset.metadata, importMetadata)) continue;
+      try { await access(resolveLocalProjectAssetPath({ objectKey: asset.objectKey })); }
+      catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') continue;
+        throw error;
+      }
+      await linkProjectAsset({ projectId, assetId: asset.id, role: 'generated' });
+      return {
+        assetId: asset.id, publicUrl: asset.publicUrl,
+        filename: asset.filename ?? basename(url),
+        mimeType: asset.mimeType ?? mimeType, sizeBytes: asset.sizeBytes ?? bytes.byteLength,
+      };
+    }
+    const persisted = await persistLocalProjectAsset({
+      projectId,
+      filename: filename ?? basename(url),
+      mimeType,
+      bytes,
+    });
+    const assetId = await recordUserAsset({
+      id: persisted.assetId,
+      type: mediaType,
+      source: 'provider',
+      storageProvider: 'local',
+      bucket: LOCAL_PROJECT_ASSET_BUCKET,
+      objectKey: persisted.objectKey,
+      publicUrl: persisted.publicUrl,
+      filename: persisted.filename,
+      mimeType,
+      sizeBytes: persisted.sizeBytes,
+      sha256: persisted.sha256,
+      originProjectId: projectId,
+      metadata: importMetadata,
+    });
+    await linkProjectAsset({ projectId, assetId, role: 'generated' });
 
-  return {
-    assetId,
-    publicUrl: persisted.publicUrl,
-    filename: persisted.filename,
-    mimeType,
-    sizeBytes: persisted.sizeBytes,
-  };
+    return {
+      assetId,
+      publicUrl: persisted.publicUrl,
+      filename: persisted.filename,
+      mimeType,
+      sizeBytes: persisted.sizeBytes,
+    };
+  });
 }
 
 type ImportInput = Omit<Parameters<typeof importShortfilmMedia>[0], 'mediaType'>;

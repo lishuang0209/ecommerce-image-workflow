@@ -85,11 +85,14 @@ import {
 } from '@/lib/request-body-limit';
 import { validateTrustedWorkspaceMutation, validateTrustedWorkspaceJsonMutation } from '@/lib/trusted-local-request';
 
-import { buildShortfilmCanvasLinks } from '@/core/video/shortfilm-canvas-links';
+import { buildShortfilmCanvasLinks, buildShortfilmCanvasLayout } from '@/core/video/shortfilm-canvas-links';
 import { mergeStoryboardEdits, storyboardEditSchema } from '@/core/video/shortfilm-storyboard-edit';
 
 const storyboardRevision = (artifact: ShortfilmStoryboardArtifact) =>
   createHash('sha256').update(JSON.stringify(artifact)).digest('hex');
+
+const videoSelectionRevision = (storyboard: ShortfilmStoryboardArtifact | null, video: ShortfilmVideoArtifact) =>
+  createHash('sha256').update(JSON.stringify({ storyboard, clips: (video.clips ?? []).map(({ id, selected }) => ({ id, selected })) })).digest('hex');
 
 const MAX_REQUEST_BYTES = 64 * 1024;
 
@@ -148,10 +151,11 @@ const saveStoryboardSchema = z.object({
 
 const bodySchema = z.discriminatedUnion('action', [
   startSchema,
+  z.object({ projectId: z.string().uuid(), action: z.literal('adopt_videos_and_assemble'), baseRevision: z.string().regex(/^[a-f0-9]{64}$/), locale: localeSchema }).strict(),
   z.object({ projectId: z.string().uuid(), action: z.literal('frame_asset'), sceneId: z.string().min(1).max(200), operation: z.enum(['save', 'regenerate', 'select']), prompt: z.string().trim().min(1).max(12000).optional(), version: z.string().min(1).max(2000).optional(), locale: localeSchema }).strict(),
   z.object({ projectId: z.string().uuid(), action: z.literal('upload_frame'), sceneId: z.string().min(1).max(200), locale: localeSchema }).strict(),
   z.object({ projectId: z.string().uuid(), action: z.literal('video_clip'), operation: z.enum(['save', 'select', 'regenerate']).optional(), version: z.string().max(2000).optional(), clipId: z.string().min(1).max(200), description: z.string().trim().min(1).max(12000).optional(), locale: localeSchema }).strict(),
-  z.object({ projectId: z.string().uuid(), action: z.literal('sync_canvas'), locale: localeSchema }).strict(),
+  z.object({ projectId: z.string().uuid(), action: z.literal('sync_canvas'), arrange: z.boolean().optional(), locale: localeSchema }).strict(),
   designAssetSchema,
   saveStoryboardSchema,
   runSchema,
@@ -337,8 +341,10 @@ async function readState(projectId: string) {
   } catch { /* Not generated yet. */ }
 
   let video: ShortfilmVideoArtifact | null = null;
+  let selectionRevision: string | null = null;
   try {
     const raw = await getShortfilmVideos(session.sessionId);
+    selectionRevision = videoSelectionRevision(storyboard, raw);
     const saved = await loadProjectWithLatestSnapshot({ projectId });
     video = { clips: (raw.clips ?? []).map((scene) => ({ ...scene,
       selected: saved?.snapshot.cards.find((card) => card.id === `video-clip-${scene.id}`)?.url ?? undefined,
@@ -352,7 +358,9 @@ async function readState(projectId: string) {
     const raw = await getShortfilmFinal(session.sessionId);
     const saved = await loadProjectWithLatestSnapshot({ projectId });
     final = { final_videos: (raw.final_videos ?? []).map((video) => ({ ...video,
-      path: saved?.snapshot.cards.find((card) => card.id === `video-final-episode-${video.episode}`)?.url ?? '',
+      path: session.finalDownloads?.[String(video.episode)]?.url ??
+        saved?.snapshot.cards.find((card) => card.id === `video-final-episode-${video.episode}`)?.url ?? '',
+      preview_path: saved?.snapshot.cards.find((card) => card.id === `video-final-episode-${video.episode}`)?.url ?? '',
     })) };
   } catch { /* No final video yet. */ }
 
@@ -367,6 +375,7 @@ async function readState(projectId: string) {
     final,
     finalStale: session.finalStale ?? true,
     video,
+    videoSelectionRevision: selectionRevision,
     videoStale: session.videoStale ?? true,
     staleVideoIds: session.videoStale === false ? [] : session.staleVideoIds ??
       (storyboard?.episodes ?? []).flatMap((episode) => (episode.segments ?? []).map((segment) => segment.segment_id)),
@@ -382,7 +391,7 @@ async function readState(projectId: string) {
   };
 }
 
-async function syncCanvasLinks(projectId: string) {
+async function syncCanvasLinks(projectId: string, arrange = false, newCardIds?: string[]) {
   const session = await readShortfilmSession(projectId);
   let storyboard: ShortfilmStoryboardArtifact | null = null;
   if (session) {
@@ -391,7 +400,7 @@ async function syncCanvasLinks(projectId: string) {
   for (let attempt = 0; attempt < 3; attempt++) {
     const saved = await loadProjectWithLatestSnapshot({ projectId });
     if (!saved) throw new Error('Project not found.');
-    const operations = buildShortfilmCanvasLinks(saved.snapshot.cards, storyboard);
+    const operations = [...buildShortfilmCanvasLinks(saved.snapshot.cards, storyboard), ...(arrange ? buildShortfilmCanvasLayout(saved.snapshot.cards, saved.snapshot.frames, storyboard).filter((op) => !newCardIds || (op.type === 'move_card' && newCardIds.includes(op.cardId))) : [])];
     if (!operations.length) return { document: saved.snapshot, version: saved.snapshotVersion };
     const commandId = randomUUID();
     const result = await persistBeatDesignCommand({ projectId, origin: 'ui', commandId,
@@ -507,7 +516,7 @@ async function importDesignCards(
     const image = await ((mode === 'clip' || mode === 'final') ? importShortfilmVideo : importShortfilmImage)({
       projectId,
       url: shortfilmAssetUrl(path),
-      filename: `${asset.id}.${(mode === 'clip' || mode === 'final') ? 'mp4' : 'png'}`,
+      filename: `${asset.id}.${(mode === 'clip' || mode === 'final') ? (path.toLowerCase().endsWith('.webm') ? 'webm' : 'mp4') : 'png'}`,
       metadata: {
         shortfilmAssetId: asset.id,
         kind: mode === 'design' ? asset.kind : mode,
@@ -576,7 +585,7 @@ async function importDesignCards(
         throw new Error('Project not found after saving design images.');
       }
       return {
-        ...await syncCanvasLinks(projectId),
+        ...await syncCanvasLinks(projectId, true, imported.map((item) => `video-${mode}-${item.shortfilmId}`).filter((id) => !state.snapshot.frames[id])),
         importedCardIds: imported.map((item) => `video-${mode}-${item.shortfilmId}`),
         importedCount: imported.length,
       };
@@ -652,7 +661,7 @@ async function POST({ request }: { request: Request }) {
 
   try {
     if (body.action === 'sync_canvas') {
-      return Response.json(await syncCanvasLinks(body.projectId));
+      return Response.json(await syncCanvasLinks(body.projectId, body.arrange));
     }
     if (body.action === 'start') {
       const existing = await readShortfilmSession(body.projectId);
@@ -696,14 +705,15 @@ async function POST({ request }: { request: Request }) {
       });
     }
 
-    const session = await readShortfilmSession(body.projectId);
-    if (!session) {
+    const savedSession = await readShortfilmSession(body.projectId);
+    if (!savedSession) {
       return Response.json(
         { error: 'Start the video session before running a stage.' },
         { status: 400 }
       );
     }
 
+    let session = savedSession;
     const workflowStatus = await getShortfilmStatus(session.sessionId);
     if (Object.values(workflowStatus.status ?? {}).includes('running')) {
       return Response.json({ error: 'Wait for the current generation to finish.' }, { status: 409 });
@@ -843,7 +853,29 @@ async function POST({ request }: { request: Request }) {
       return Response.json({ ...imported, state: await readState(body.projectId) });
     }
 
-    const stage = body.action === 'video_clip' ? SHORTFILM_VIDEO_STAGE : body.stage ?? SHORTFILM_SCRIPT_STAGE;
+    if (body.action === 'adopt_videos_and_assemble') {
+      const prerequisites = [SHORTFILM_SCRIPT_STAGE, SHORTFILM_DESIGN_STAGE, SHORTFILM_STORYBOARD_STAGE, SHORTFILM_REFERENCE_STAGE];
+      const storyboard = await getShortfilmStoryboard(session.sessionId);
+      const video = await getShortfilmVideos(session.sessionId);
+      if (body.baseRevision !== videoSelectionRevision(storyboard, video)) {
+        return Response.json({ error: 'The selected videos or storyboard changed. Refresh and confirm again.' }, { status: 409 });
+      }
+      if (!prerequisites.every((stage) => session!.confirmedStages?.includes(stage)) || session.storyboardStale ||
+          session.referenceStale !== false || !videoIsReady(workflowStatus.status) || !hasVideoContent(video, storyboard)) {
+        return Response.json({ error: 'Confirm the current storyboard and frames and select a complete set of existing videos first.' }, { status: 409 });
+      }
+      const ids = (storyboard.episodes ?? []).flatMap((episode) => (episode.segments ?? []).map((segment) => segment.segment_id));
+      const clips = ids.map((id) => video.clips!.find((clip) => clip.id === id)!);
+      // Validate and localize every selected file before accepting stale videos.
+      await importDesignCards(body.projectId, { settings: clips }, body.locale, 'clip');
+      session = { ...session, videoStale: false, staleVideoIds: [], finalStale: true,
+        confirmedStages: [...confirmationsBeforeStage(session.confirmedStages, SHORTFILM_VIDEO_STAGE), SHORTFILM_VIDEO_STAGE],
+        adoptedVideos: { at: new Date().toISOString(), revision: body.baseRevision,
+          clips: clips.map(({ id, selected }) => ({ id, selected: selected! })) } };
+      await writeShortfilmSession(session);
+    }
+
+    const stage = body.action === 'adopt_videos_and_assemble' ? SHORTFILM_FINAL_STAGE : body.action === 'video_clip' ? SHORTFILM_VIDEO_STAGE : body.stage ?? SHORTFILM_SCRIPT_STAGE;
     const confirmed = session.confirmedStages ?? [];
     const prerequisites = stage === SHORTFILM_FINAL_STAGE
       ? [SHORTFILM_SCRIPT_STAGE, SHORTFILM_DESIGN_STAGE, SHORTFILM_STORYBOARD_STAGE, SHORTFILM_REFERENCE_STAGE, SHORTFILM_VIDEO_STAGE]
@@ -927,9 +959,17 @@ async function POST({ request }: { request: Request }) {
           final.final_videos?.some((video) => previous.final_videos?.some((old) => old.path === video.path))) {
         throw new Error(status.error || 'Final assembly did not produce all new outputs.');
       }
-      const videos = (final.final_videos ?? []).map((video) => ({ id: `episode-${video.episode}`, name: video.name, selected: video.path }));
+      const finalDownloads: NonNullable<typeof session.finalDownloads> = {};
+      for (const video of final.final_videos ?? []) {
+        if (video.preview_path) {
+          const download = await importShortfilmVideo({ projectId: body.projectId, url: shortfilmAssetUrl(video.path),
+            filename: `episode-${video.episode}.mp4`, metadata: { kind: 'final-download', episode: video.episode } });
+          finalDownloads[String(video.episode)] = { sourcePath: video.path, url: download.publicUrl };
+        }
+      }
+      const videos = (final.final_videos ?? []).map((video) => ({ id: `episode-${video.episode}`, name: video.name, selected: video.preview_path || video.path }));
       const imported = await importDesignCards(body.projectId, { settings: videos }, body.locale, 'final');
-      await writeShortfilmSession({ ...session, finalStale: false,
+      await writeShortfilmSession({ ...session, finalStale: false, finalDownloads,
         confirmedStages: confirmationsBeforeStage(confirmed, stage) });
       return Response.json({ ...imported, state: await readState(body.projectId) });
     }

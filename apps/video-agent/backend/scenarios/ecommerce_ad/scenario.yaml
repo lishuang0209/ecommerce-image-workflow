@@ -58,6 +58,6 @@ stages:
     name: 视频生成
     short_name: 视频
   - type: post_production
-    agent: scenarios.ecommerce_ad.agents:EcommerceVideoEditorAgent
+    agent: scenarios.ecommerce_ad.video_editor:EcommerceVideoEditorAgent
     name: 成片剪辑
     short_name: 成片

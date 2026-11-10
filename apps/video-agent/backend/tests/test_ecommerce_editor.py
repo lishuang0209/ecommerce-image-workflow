@@ -58,3 +58,34 @@ def test_editor_override_scoped_to_ecommerce():
     registry = ScenarioRegistry(SCENARIOS_DIR)
     assert registry.get('ecommerce_ad').agent_class('post_production') is EcommerceVideoEditorAgent
     assert registry.get('short_film').stage('post_production').agent is None
+
+
+@pytest.mark.asyncio
+async def test_dual_format_outputs_preserve_real_audio(tmp_path, monkeypatch):
+    import array
+    monkeypatch.chdir(tmp_path)
+    executable = get_ffmpeg_exe()
+    paths = {}
+    for name, frequency in (("red", 440), ("blue", 880)):
+        path = tmp_path / f"{name}.mp4"
+        subprocess.run([executable, "-y", "-f", "lavfi", "-i", f"color=c={name}:s=32x32:r=10:d=0.4",
+                        "-f", "lavfi", "-i", f"sine=frequency={frequency}:duration=0.4",
+                        "-c:v", "libx264", "-c:a", "aac", "-shortest", str(path)], check=True, capture_output=True)
+        paths[name] = path
+    result = await EcommerceVideoEditorAgent().process(editor_input(paths))
+    video = result["payload"]["final_videos"][0]
+    assert video["path"].endswith(".mp4")
+    assert video["preview_path"].endswith(".webm")
+    for key, codec in (("path", "aac"), ("preview_path", "opus")):
+        path = Path(video[key])
+        assert path.stat().st_size > 0
+        probe = subprocess.run([executable, "-hide_banner", "-i", str(path)], capture_output=True, text=True)
+        assert f"Audio: {codec}" in probe.stderr
+        decoded = subprocess.run([executable, "-v", "error", "-xerror", "-i", str(path), "-vn",
+                                  "-ac", "1", "-ar", "8000", "-f", "f32le", "-"], check=True, capture_output=True).stdout
+        samples = array.array("f", decoded)
+        assert len(samples) >= 6000
+        # Both halves retain audible signal, not merely an empty audio track.
+        for start in (800, 4000):
+            window = samples[start:start + 1600]
+            assert sum(value * value for value in window) / len(window) > 0.001

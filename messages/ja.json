@@ -922,7 +922,9 @@
         "videoFrameVersion": "AI生成：v{number}",
         "videoFrameUploadedVersion": "アップロード：v{number}",
         "videoClipVersionSelected": "動画のバージョンを切り替えました。動画を再確認して完成動画を再合成してください。",
-        "videoClipPromptHint": "保存では生成しません。再生成で動画に適用します。"
+        "videoClipPromptHint": "保存では生成しません。再生成で動画に適用します。",
+        "videoAdoptExisting": "既存の動画で合成を続ける",
+        "videoAdoptExistingConfirm": "選択中の既存動画で合成します。再生成していない変更は反映されず、動画生成モデルは呼び出しません。続行しますか？"
       }
     },
     "editor": {
