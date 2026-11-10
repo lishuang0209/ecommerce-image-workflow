@@ -1,0 +1,87 @@
+name: 问题反馈 / Bug
+description: 运行出错、结果异常或文档与实际不符
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢反馈！提交前请注意：**不要在任何地方粘贴 API Key、Access Key 或 `config.yaml` / `.env` 的完整内容。** 如需贴配置，请先把密钥替换成 `***`。
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: 问题描述
+      description: 发生了什么？你原本期望看到什么？
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤
+      description: 尽量写清楚从启动到出错的每一步。
+      placeholder: |
+        1. 执行 ./scripts/dev.sh
+        2. 首页选择「电商广告片」场景，输入……
+        3. 在「分镜规划」阶段点击确认后……
+    validations:
+      required: true
+
+  - type: input
+    id: scenario
+    attributes:
+      label: 使用的场景
+      description: 场景 id，例如 short_film、ecommerce_ad，或你自己新增的场景。
+      placeholder: short_film
+
+  - type: dropdown
+    id: stage
+    attributes:
+      label: 出错阶段
+      options:
+        - 剧本 / 脚本
+        - 角色 / 场景设计
+        - 分镜
+        - 参考图
+        - 视频生成
+        - 后期剪辑
+        - 启动 / 安装
+        - 前端界面
+        - 其他 / 不确定
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: 报错日志
+      description: 后端终端输出、浏览器控制台报错等。会自动按代码格式显示。请确认其中不含密钥。
+      render: shell
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: 运行环境
+      description: 操作系统、Python / Node 版本、启动方式（install.sh / dev.sh / 手动 / Docker），以及使用的模型名称（不要填密钥）。
+      placeholder: |
+        - 系统：macOS 15
+        - Python 3.12 / Node 20
+        - 启动方式：./scripts/dev.sh
+        - 模型：qwen-plus / doubao-seedream-xxx / wan2.x
+    validations:
+      required: true
+
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: 截图（可选）
+      description: 可直接拖拽图片到这里。
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: 确认
+      options:
+        - label: 我已确认上面的内容中没有 API Key 或其他密钥
+          required: true

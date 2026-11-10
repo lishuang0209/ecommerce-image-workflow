@@ -1,0 +1,94 @@
+name: 场景提案 / 分享
+description: 提议或分享一个新的场景包（backend/scenarios/<id>/），例如电商广告、漫剧、文旅宣传、商品海报
+title: "[场景] "
+labels: ["scenario"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        场景包是把这个底座改造成某个垂直领域 AIGC 产品的主要方式：一个 `scenario.yaml`，加上可选的 `prompts/` 覆盖和 `agents.py`。
+        字段说明见 `docs/scenarios.md`，上手教程见 `docs/tutorial-first-scenario.md`，内置场景拆解见 `docs/examples.md`。
+
+        还没开始写也可以提：先把产品想法说清楚，大家可以一起讨论阶段设计。
+
+  - type: dropdown
+    id: status
+    attributes:
+      label: 当前进度
+      options:
+        - 只是想法，想先讨论
+        - 已在自己的 fork 里做出来，想分享
+        - 已做出来，准备提 PR 合入
+    validations:
+      required: true
+
+  - type: input
+    id: scenario-id
+    attributes:
+      label: 场景 id 与显示名
+      description: id 只用小写字母、数字和下划线，以字母开头。
+      placeholder: pet_food_ad / 宠物食品广告
+    validations:
+      required: true
+
+  - type: textarea
+    id: domain
+    attributes:
+      label: 领域与使用场景
+      description: 这个场景解决什么问题？最终产出是什么（竖屏短视频、漫剧分集、海报……）？
+    validations:
+      required: true
+
+  - type: textarea
+    id: users
+    attributes:
+      label: 目标用户
+      description: 谁会用？他们现在怎么做这件事，痛点是什么？
+    validations:
+      required: true
+
+  - type: textarea
+    id: stages
+    attributes:
+      label: 阶段设计
+      description: 列出这个场景用到的阶段、每个阶段在界面上叫什么、和默认 short_film 相比做了哪些增删或改名。
+      placeholder: |
+        1. script_generation → 「广告脚本」：痛点—卖点—证明—行动号召
+        2. character_design → 「商品设定」：商品四视图，可上传实拍图
+        3. storyboard → 「广告分镜」
+        ……
+        去掉了：post_production（直接交付视频片段）
+    validations:
+      required: true
+
+  - type: textarea
+    id: prompts
+    attributes:
+      label: 覆盖了哪些提示词
+      description: 列出 `prompts/` 下覆盖的文件，并简述改动思路；没有覆盖的会自动回退到默认提示词。如果写了 `agents.py`，也请说明替换了哪个阶段、为什么。
+      placeholder: |
+        - prompts/script/generate_script_zh.txt：改成广告脚本结构，限制 30 秒
+        - prompts/character/character_zh.txt：主体从人物换成商品
+        - agents.py：无
+
+  - type: textarea
+    id: defaults
+    attributes:
+      label: 默认参数
+      description: 画面风格、比例、分辨率、视频生成方式、集数等，以及这样设置的理由。
+      placeholder: style=realistic, video_ratio=9:16, video_resolution=720P, video_generation_mode=first_frame
+
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: 截图或成片
+      description: 首页场景卡片、各阶段结果、最终成片截图或链接。可直接拖拽图片到这里。
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: 确认
+      options:
+        - label: 截图、日志和配置中不含 API Key 或其他密钥
+          required: true
+        - label: 如果已有实现，`cd backend && uv run --extra dev pytest tests/test_scenarios.py` 能通过

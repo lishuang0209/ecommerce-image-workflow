@@ -1,0 +1,37 @@
+# docker compose up --build   ->  frontend http://localhost:3000, backend http://localhost:8000
+# Put API keys in .env (copy .env.example); they reach the backend as SFA_* variables.
+services:
+  backend:
+    build: ./backend
+    env_file:
+      - path: .env
+        required: false
+    ports:
+      - "8000:8000"
+    volumes:
+      # Sessions, generated images and videos.
+      - ./data/code:/app/code
+      # Settings saved from the web UI.
+      - ./data/config:/app/config-data
+    environment:
+      SFA_HOST: 0.0.0.0
+      SFA_CONFIG: /app/config-data/config.yaml
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health')"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        # Server-side proxy target inside the compose network.
+        BACKEND_API_URL: http://backend:8000
+        # Browser-side SSE base URL.
+        NEXT_PUBLIC_API_URL: ${PUBLIC_BACKEND_URL:-http://localhost:8000}
+    ports:
+      - "3000:3000"
+    depends_on:
+      backend:
+        condition: service_healthy

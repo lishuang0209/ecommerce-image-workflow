@@ -1,0 +1,14 @@
+.DS_Store
+.vscode/
+.idea/
+__pycache__/
+*.pyc
+
+# Local secrets and runtime data
+.env
+backend/config.yaml
+backend/registry/models.local.yaml
+backend/code/
+backend/temp/
+data/
+.pytest_cache/

@@ -1,0 +1,3 @@
+# 允许不使用模板直接开 Issue（例如课堂讨论、使用疑问）。
+# 仓库发布后可在 contact_links 中补充讨论区或文档链接。
+blank_issues_enabled: true

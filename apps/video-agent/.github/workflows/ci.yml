@@ -1,0 +1,62 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: 后端测试 (pytest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      # 测试不需要任何 API Key：backend/config.yaml 不入库，配置会自动回退到 config.yaml.example
+      - name: Install dependencies
+        working-directory: backend
+        run: uv sync --extra dev --python 3.12
+
+      - name: Run tests
+        working-directory: backend
+        run: uv run --extra dev pytest -q
+
+  frontend:
+    name: 前端类型检查与构建
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Type check
+        working-directory: frontend
+        run: npx tsc --noEmit -p .
+
+      # 注意：暂未在 CI 中强制 `npm run lint`，现有代码仍有较多历史 lint 问题，清理完成后再开启
+      - name: Build
+        working-directory: frontend
+        run: npm run build
